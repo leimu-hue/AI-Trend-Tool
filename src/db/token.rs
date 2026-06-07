@@ -66,6 +66,37 @@ pub async fn revoke_token(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error>
     Ok(())
 }
 
+pub async fn count_all_tokens(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_tokens")
+        .fetch_one(pool)
+        .await?;
+    Ok(row.0)
+}
+
+/// Get the first non-revoked token (for startup console display).
+pub async fn get_first_active_token(
+    pool: &SqlitePool,
+) -> Result<Option<ApiToken>, sqlx::Error> {
+    sqlx::query_as::<_, ApiToken>(
+        "SELECT * FROM api_tokens WHERE revoked = 0 ORDER BY created_at ASC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn insert_initial_token(
+    pool: &SqlitePool,
+    name: &str,
+    token: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO api_tokens (name, token) VALUES (?, ?)")
+        .bind(name)
+        .bind(token)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn delete_token(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM api_tokens WHERE id = ?")
         .bind(id)

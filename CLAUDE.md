@@ -55,3 +55,31 @@ cd frontend && npm run build    # production build
 
 # Production backend build
 cargo build --release
+```
+
+## Development Rules
+
+### SQL Organization
+- **All SQL queries MUST live in `src/db/<module>.rs`** (e.g., `db/token.rs`, `db/article.rs`).
+- `handlers/`, `middleware/`, `services/`, `routes.rs`, and `main.rs` MUST NOT contain raw `sqlx::query*` or inline SQL strings.
+- Every database operation must be a named function in the corresponding `db/` module, accepting `&SqlitePool` as the first parameter.
+- Handlers/middleware call `db::<module>::<function>()` — never execute SQL directly.
+
+### HTTP Methods
+- **Only use `GET` and `POST`** for all API endpoints.
+- Do NOT use `DELETE`, `PUT`, or `PATCH`.
+- Semantics are expressed via URL path:
+  - Create → `POST /resource`
+  - Read/List → `GET /resource`
+  - Update → `POST /resource/update/{id}` or `POST /resource/{id}/update`
+  - Delete/Revoke → `POST /resource/delete/{id}` or `POST /resource/revoke/{id}`
+
+### Middleware Pattern
+- Use `middleware::from_fn_with_state(state, auth_middleware)` for authenticated routes.
+- Auth middleware lives in `src/middleware/auth.rs` and extracts `State<AppState>`.
+- The axum 0.7.9 `Path<T>` + `from_fn` routing bug is resolved in axum 0.8+ — `Path` extractors work correctly with `from_fn_with_state` middleware.
+
+### API Documentation
+- API docs live in `docs/apis/` as Markdown files (e.g., `token-api.md`).
+- When adding, modifying, or removing an endpoint, **always update the corresponding `docs/apis/*.md`** to keep URL, method, params, request/response schema, and examples in sync.
+- Each MD file groups endpoints by domain (token, source, keyword, etc.).

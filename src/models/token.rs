@@ -2,7 +2,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-#[derive(Debug, FromRow, Serialize)]
+#[derive(Debug, Clone, FromRow, Serialize)]
 pub struct ApiToken {
     pub id: i64,
     pub name: String,
@@ -42,3 +42,4 @@ pub struct CreateTokenRequest {
     pub name: String,
     pub expires_at: Option<NaiveDateTime>,
 }
+

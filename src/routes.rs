@@ -1,30 +1,39 @@
-use axum::{routing::get, Json, Router};
+use axum::{
+    middleware,
+    routing::{get, post},
+    Json, Router,
+};
 use serde_json::json;
 use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
 use crate::config::AppConfig;
+use crate::handlers::token;
+use crate::middleware::auth::auth_middleware;
 
 pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
-    let state = AppState { pool, config };
+    let state = AppState {
+        pool: pool.clone(),
+        config,
+    };
+
+    // ── API routes ──
+    let api = Router::new()
+        .route("/tokens", post(token::create_token))
+        .route("/tokens", get(token::list_tokens))
+        .route("/tokens/revoke/{id}", post(token::revoke_token))
+        // Sources API (step 04)
+        // Keywords API (step 04)
+        // Channels API (step 04)
+        // Query API (step 05)
+        // System control (step 05)
+        .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     Router::new()
-        // Health check (no auth required)
         .route("/health", get(health_check))
-        // API v1 (auth middleware added in step 03)
-        .nest("/api/v1", api_routes())
-        .with_state(state)
+        .nest("/api/v1", api)
         .layer(CorsLayer::permissive())
-}
-
-fn api_routes() -> Router<AppState> {
-    Router::new()
-    // Token API (step 03)
-    // Sources API (step 04)
-    // Keywords API (step 04)
-    // Channels API (step 04)
-    // Query API (step 05)
-    // System control (step 05)
 }
 
 async fn health_check() -> Json<serde_json::Value> {
