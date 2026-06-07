@@ -1,26 +1,22 @@
 # API接口文档
 
 <cite>
-**本文档引用的文件**
+**本文引用的文件**
 - [main.rs](file://src/main.rs)
 - [routes.rs](file://src/routes.rs)
 - [auth.rs](file://src/middleware/auth.rs)
 - [error.rs](file://src/error.rs)
 - [config.rs](file://src/config.rs)
-- [token.rs（处理器）](file://src/handlers/token.rs)
-- [source.rs（处理器）](file://src/handlers/source.rs)
-- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
-- [channel.rs（处理器）](file://src/handlers/channel.rs)
-- [token.rs（模型）](file://src/models/token.rs)
-- [source.rs（模型）](file://src/models/source.rs)
-- [keyword.rs（模型）](file://src/models/keyword.rs)
-- [channel.rs（模型）](file://src/models/channel.rs)
-- [token.rs（数据库）](file://src/db/token.rs)
-- [source.rs（数据库）](file://src/db/source.rs)
-- [keyword.rs（数据库）](file://src/db/keyword.rs)
-- [channel.rs（数据库）](file://src/db/channel.rs)
+- [db.rs](file://src/db.rs)
+- [token.rs](file://src/handlers/token.rs)
+- [source.rs](file://src/handlers/source.rs)
+- [keyword.rs](file://src/handlers/keyword.rs)
+- [channel.rs](file://src/handlers/channel.rs)
+- [query.rs](file://src/handlers/query.rs)
 - [token-api.md](file://docs/apis/token-api.md)
-- [20260607044921_init.sql](file://docs/migrations/20260607044921_init.sql)
+- [source-api.md](file://docs/apis/source-api.md)
+- [keyword-api.md](file://docs/apis/keyword-api.md)
+- [channel-api.md](file://docs/apis/channel-api.md)
 </cite>
 
 ## 目录
@@ -30,349 +26,361 @@
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
 6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
+7. [性能与可扩展性](#性能与可扩展性)
+8. [故障排查指南](#故障排查指南)
 9. [结论](#结论)
 10. [附录](#附录)
 
 ## 简介
-本文件为“AI趋势监控系统”的完整API接口文档，覆盖认证与令牌管理、数据源管理、关键词管理、推送渠道管理等全部RESTful端点。文档包含：
-- 统一的请求/响应模式与错误格式
-- 认证机制与权限控制
-- 参数校验规则与安全最佳实践
-- API版本管理策略与向后兼容说明
-- curl与JavaScript调用示例路径
+本文件为“AI趋势监控系统”的完整API接口文档，覆盖所有RESTful端点的HTTP方法、URL模式、请求/响应结构、认证方式与错误处理策略。系统采用Axum框架，基于SQLite数据库，提供令牌管理、数据源管理、关键词管理、推送渠道管理以及查询分析等能力，并支持手动触发过滤与推送任务。
 
-系统采用Axum框架，基于SQLite存储，提供/v1版本的API，并通过中间件实现统一的Bearer Token认证。
+- 版本控制：当前路由前缀为 /api/v1，具备清晰的版本化路径，便于后续演进与向后兼容。
+- 认证机制：统一使用Bearer Token认证，中间件在进入业务处理器前完成校验、过期检查与最后使用时间更新。
+- 错误格式：统一返回结构，包含状态码与标准化错误码，便于客户端一致化处理。
+- 背景服务：系统同时运行解析器、过滤器与推送器三类后台任务，支持手动触发。
 
 ## 项目结构
-后端采用模块化组织：路由层负责URL映射与中间件装配；处理器层处理业务逻辑；数据库层封装SQL操作；模型层定义数据结构；中间件层提供认证与错误处理。
+后端采用模块化组织，按功能域划分handlers、services、models、db等目录；路由集中定义于routes.rs，全局中间件在根级/nest中应用。
 
 ```mermaid
 graph TB
-Client["客户端"] --> Router["路由层<br/>routes.rs"]
-Router --> AuthMW["认证中间件<br/>middleware/auth.rs"]
-AuthMW --> Handlers["处理器层<br/>handlers/*.rs"]
-Handlers --> Models["模型层<br/>models/*.rs"]
-Handlers --> DB["数据库层<br/>db/*.rs"]
-DB --> SQLite["SQLite 数据库"]
+subgraph "入口与配置"
+MAIN["main.rs<br/>启动与模式选择"]
+CONFIG["config.rs<br/>配置加载"]
+DB_POOL["db.rs<br/>数据库连接池初始化"]
+end
+subgraph "路由与中间件"
+ROUTES["routes.rs<br/>路由注册与CORS"]
+AUTH_MW["auth.rs<br/>Bearer Token中间件"]
+end
+subgraph "业务层"
+HANDLERS["handlers/*.rs<br/>各模块处理器"]
+SERVICES["services/*.rs<br/>后台任务服务"]
+MODELS["models/*.rs<br/>数据模型"]
+DB_MOD["db/*.rs<br/>数据库访问层"]
+end
+MAIN --> ROUTES
+MAIN --> DB_POOL
+CONFIG --> MAIN
+ROUTES --> AUTH_MW
+ROUTES --> HANDLERS
+HANDLERS --> DB_MOD
+SERVICES --> DB_MOD
 ```
 
 图表来源
-- [routes.rs:14-50](file://src/routes.rs#L14-L50)
-- [auth.rs:18-59](file://src/middleware/auth.rs#L18-L59)
-- [token.rs（处理器）:13-66](file://src/handlers/token.rs#L13-L66)
-- [source.rs（处理器）:12-91](file://src/handlers/source.rs#L12-L91)
-- [keyword.rs（处理器）:12-82](file://src/handlers/keyword.rs#L12-L82)
-- [channel.rs（处理器）:12-71](file://src/handlers/channel.rs#L12-L71)
+- [main.rs:64-164](file://src/main.rs#L64-L164)
+- [routes.rs:14-70](file://src/routes.rs#L14-L70)
+- [auth.rs:14-58](file://src/middleware/auth.rs#L14-L58)
+- [db.rs:10-27](file://src/db.rs#L10-L27)
 
 章节来源
-- [routes.rs:14-50](file://src/routes.rs#L14-L50)
-- [config.rs:52-59](file://src/config.rs#L52-L59)
+- [main.rs:64-164](file://src/main.rs#L64-L164)
+- [routes.rs:14-70](file://src/routes.rs#L14-L70)
+- [config.rs:1-58](file://src/config.rs#L1-L58)
+- [db.rs:10-27](file://src/db.rs#L10-L27)
 
 ## 核心组件
-- 路由与版本：所有业务API位于/nest("/api/v1", ...)下，当前版本为v1。
-- 认证中间件：全局启用Bearer Token认证，从Authorization头提取令牌并校验有效性、是否撤销、是否过期。
-- 错误处理：统一返回结构，包含错误码与消息；数据库异常自动转换为内部错误。
-- 响应包装：成功响应统一包裹在"data"字段中，状态码遵循REST语义。
+- 路由与版本控制：所有业务API位于 /api/v1 前缀下，健康检查 /health 不需要认证。
+- 中间件：统一的Bearer Token认证中间件，负责提取、校验、过期检查与最后使用时间异步更新。
+- 错误处理：统一的AppError枚举，映射到标准HTTP状态码与错误码；数据库异常自动转换为内部错误。
+- 数据库：SQLite连接池，启用WAL与外键约束，最大并发连接数固定。
+- 配置：通过配置文件加载服务器、数据库、鉴权、解析器、过滤器、推送器等参数。
 
 章节来源
-- [routes.rs:14-50](file://src/routes.rs#L14-L50)
-- [auth.rs:18-59](file://src/middleware/auth.rs#L18-L59)
-- [error.rs:23-79](file://src/error.rs#L23-L79)
+- [routes.rs:14-70](file://src/routes.rs#L14-L70)
+- [auth.rs:14-58](file://src/middleware/auth.rs#L14-L58)
+- [error.rs:8-79](file://src/error.rs#L8-L79)
+- [db.rs:10-27](file://src/db.rs#L10-L27)
+- [config.rs:1-58](file://src/config.rs#L1-L58)
 
 ## 架构总览
-系统启动时执行初始化流程：加载配置、建立数据库连接池、运行迁移、确保至少存在一个初始令牌、构建路由并启动服务。
+系统采用“路由 -> 中间件 -> 处理器 -> 数据库/服务”的分层架构。认证中间件对 /api/v1 下的所有端点生效，处理器负责参数解析、业务逻辑与数据封装，数据库访问层提供CRUD操作，后台服务负责周期性任务与手动触发。
 
 ```mermaid
 sequenceDiagram
-participant CLI as "命令行"
-participant Main as "main.rs"
-participant Config as "配置加载"
-participant DB as "数据库连接池"
-participant Migrate as "迁移"
-participant Token as "初始令牌"
-participant Router as "路由"
-participant Server as "HTTP服务器"
-CLI->>Main : 启动应用
-Main->>Config : 加载配置
-Main->>DB : 初始化连接池
-Main->>Migrate : 执行迁移
-Main->>Token : 确保初始令牌存在
-Main->>Router : 创建路由
-Main->>Server : 绑定地址并监听
-Server-->>CLI : 服务就绪
+participant C as "客户端"
+participant R as "路由(routes.rs)"
+participant MW as "认证中间件(auth.rs)"
+participant H as "处理器(handlers/*.rs)"
+participant D as "数据库(db/*.rs)"
+C->>R : 请求 /api/v1/...
+R->>MW : 应用中间件
+MW->>MW : 提取Authorization头
+MW->>D : 查询令牌有效性与过期
+D-->>MW : 返回令牌或空
+MW->>MW : 更新最后使用时间(异步)
+MW-->>R : 放行或返回401
+R->>H : 分发到具体处理器
+H->>D : 执行数据库操作
+D-->>H : 返回结果
+H-->>C : 200/201/204 或错误响应
 ```
 
 图表来源
-- [main.rs:63-95](file://src/main.rs#L63-L95)
-- [routes.rs:14-50](file://src/routes.rs#L14-L50)
-
-章节来源
-- [main.rs:63-95](file://src/main.rs#L63-L95)
+- [routes.rs:49-53](file://src/routes.rs#L49-L53)
+- [auth.rs:18-57](file://src/middleware/auth.rs#L18-L57)
+- [token.rs:18-30](file://src/handlers/token.rs#L18-L30)
+- [source.rs:27-33](file://src/handlers/source.rs#L27-L33)
+- [keyword.rs:27-41](file://src/handlers/keyword.rs#L27-L41)
+- [channel.rs:26-32](file://src/handlers/channel.rs#L26-L32)
 
 ## 详细组件分析
 
-### 认证与令牌管理API
+### 认证与令牌管理（Token API）
+- Base URL：http://localhost:8080
 - 版本：/api/v1
-- 中间件：全局Bearer Token认证，支持过期检查与最后使用时间更新
-- 端点：
-  - POST /api/v1/tokens — 创建新令牌
-  - GET /api/v1/tokens — 列出令牌（不包含明文）
-  - POST /api/v1/tokens/revoke/{id} — 撤销令牌（软删除）
-
-请求/响应模式
-- 请求体：JSON
-- 成功响应：201（创建）、200（查询/更新）、204（删除）
-- 错误响应：统一错误体，包含错误码与消息
-
-curl示例路径
-- 创建令牌：[curl创建令牌](file://docs/apis/token-api.md)
-- 列出令牌：[curl列出令牌](file://docs/apis/token-api.md)
-- 撤销令牌：[curl撤销令牌](file://docs/apis/token-api.md)
-
-JavaScript示例路径
-- 创建令牌：[JavaScript创建令牌](file://docs/apis/token-api.md)
-- 列出令牌：[JavaScript列出令牌](file://docs/apis/token-api.md)
-- 撤销令牌：[JavaScript撤销令牌](file://docs/apis/token-api.md)
-
-参数与校验
-- 创建令牌：必填name；可选expires_at（UTC时间）
-- 列出令牌：无请求体
-- 撤销令牌：路径参数{id}必须为存在的令牌ID
-
-权限与安全
-- 全局中间件强制Bearer认证
-- 令牌过期或被撤销将返回未授权
-- 令牌明文仅在创建时返回一次，后续列表隐藏
+- 全局要求：除 /health 外，所有 /api/v1/* 需要 Bearer Token 认证
+- 认证头：Authorization: Bearer <token>
+- 初始令牌：首次启动时自动生成或从配置注入，仅在生成时可见
+- 端点概览
+  - POST /api/v1/tokens：创建新令牌（64位十六进制），返回明文令牌一次
+  - GET /api/v1/tokens：列出所有令牌（隐藏明文）
+  - POST /api/v1/tokens/revoke/{id}：吊销指定令牌（软删除）
 
 ```mermaid
 sequenceDiagram
 participant Client as "客户端"
-participant Router as "路由"
-participant Auth as "认证中间件"
-participant Handler as "令牌处理器"
-participant DB as "令牌数据库"
-Client->>Router : POST /api/v1/tokens
-Router->>Auth : 应用认证中间件
-Auth->>DB : 校验令牌有效性与撤销状态
-DB-->>Auth : 通过
-Auth-->>Router : 注入令牌信息
-Router->>Handler : 处理创建请求
-Handler->>DB : 插入新令牌
-DB-->>Handler : 返回完整令牌
-Handler-->>Client : 201 + data
+participant API as "Token API"
+participant DB as "数据库"
+Client->>API : POST /api/v1/tokens
+API->>DB : 插入新令牌(名称+随机值+可选过期)
+DB-->>API : 返回完整令牌(含明文)
+API-->>Client : 201 + data(含明文令牌)
+Client->>API : GET /api/v1/tokens
+API->>DB : 查询所有令牌
+DB-->>API : 返回列表(不含明文)
+API-->>Client : 200 + data(无明文)
+Client->>API : POST /api/v1/tokens/revoke/{id}
+API->>DB : 更新revoked=1
+DB-->>API : 成功
+API-->>Client : 204
 ```
 
 图表来源
-- [routes.rs:22-24](file://src/routes.rs#L22-L24)
-- [auth.rs:18-59](file://src/middleware/auth.rs#L18-L59)
-- [token.rs（处理器）:13-30](file://src/handlers/token.rs#L13-L30)
-- [token.rs（数据库）:6-28](file://src/db/token.rs#L6-L28)
+- [token-api.md:62-198](file://docs/apis/token-api.md#L62-L198)
+- [token.rs:18-66](file://src/handlers/token.rs#L18-L66)
 
 章节来源
-- [token.rs（处理器）:13-66](file://src/handlers/token.rs#L13-L66)
-- [token.rs（模型）:40-46](file://src/models/token.rs#L40-L46)
-- [token.rs（数据库）:6-98](file://src/db/token.rs#L6-L98)
+- [token-api.md:62-198](file://docs/apis/token-api.md#L62-L198)
+- [token.rs:18-66](file://src/handlers/token.rs#L18-L66)
 
-### 数据源管理API
-- 端点：
-  - GET /api/v1/sources — 列出所有数据源
-  - POST /api/v1/sources — 创建数据源
-  - POST /api/v1/sources/{id}/update — 更新数据源
-  - POST /api/v1/sources/{id}/delete — 删除数据源
-  - POST /api/v1/sources/{id}/fetch — 触发手动抓取
-
-请求/响应模式
-- 请求体：JSON
-- 成功响应：201（创建）、200（查询/更新）、204（删除）
-- 错误响应：统一错误体
-
-curl示例路径
-- 创建数据源：[curl创建数据源](file://src/handlers/source.rs)
-- 更新数据源：[curl更新数据源](file://src/handlers/source.rs)
-- 删除数据源：[curl删除数据源](file://src/handlers/source.rs)
-- 触发抓取：[curl触发抓取](file://src/handlers/source.rs)
-
-JavaScript示例路径
-- 创建数据源：[JavaScript创建数据源](file://src/handlers/source.rs)
-- 更新数据源：[JavaScript更新数据源](file://src/handlers/source.rs)
-- 删除数据源：[JavaScript删除数据源](file://src/handlers/source.rs)
-- 触发抓取：[JavaScript触发抓取](file://src/handlers/source.rs)
-
-参数与校验
-- 创建：必填type、name、url；可选interval_seconds（默认300）、config（默认空JSON字符串）
-- 更新：所有字段可选，仅提供字段生效
-- 删除/触发抓取：需要存在对应ID
+### 数据源管理（Source API）
+- 端点概览
+  - GET /api/v1/sources：列出数据源（按创建时间倒序）
+  - POST /api/v1/sources：创建数据源（type/name/url必填，其余可选）
+  - POST /api/v1/sources/{id}/update：部分字段更新
+  - POST /api/v1/sources/{id}/delete：删除数据源
+  - POST /api/v1/sources/{id}/fetch：手动触发抓取（重置last_fetched_at）
 
 ```mermaid
 flowchart TD
-Start(["进入更新数据源"]) --> CheckFields["检查请求体字段"]
-CheckFields --> HasFields{"是否有字段提供？"}
-HasFields --> |否| ReturnExisting["返回现有记录"]
-HasFields --> |是| BuildSQL["动态构建UPDATE SQL"]
-BuildSQL --> BindParams["绑定参数并执行"]
-BindParams --> ReturnUpdated["返回更新后的记录"]
-ReturnExisting --> End(["结束"])
-ReturnUpdated --> End
+Start(["请求进入"]) --> CheckID["校验资源存在性"]
+CheckID --> Exists{"存在?"}
+Exists --> |否| NotFound["返回404"]
+Exists --> |是| Update["执行更新/删除/触发"]
+Update --> Done["返回200/204或成功体"]
+NotFound --> End(["结束"])
+Done --> End
 ```
 
 图表来源
-- [source.rs（处理器）:35-54](file://src/handlers/source.rs#L35-L54)
-- [source.rs（数据库）:42-93](file://src/db/source.rs#L42-L93)
+- [source-api.md:17-252](file://docs/apis/source-api.md#L17-L252)
+- [source.rs:12-91](file://src/handlers/source.rs#L12-L91)
 
 章节来源
-- [source.rs（处理器）:12-91](file://src/handlers/source.rs#L12-L91)
-- [source.rs（模型）:21-39](file://src/models/source.rs#L21-L39)
-- [source.rs（数据库）:5-126](file://src/db/source.rs#L5-L126)
+- [source-api.md:17-252](file://docs/apis/source-api.md#L17-L252)
+- [source.rs:12-91](file://src/handlers/source.rs#L12-L91)
 
-### 关键词管理API
-- 端点：
-  - GET /api/v1/keywords — 列出所有关键词
-  - POST /api/v1/keywords — 创建关键词
-  - POST /api/v1/keywords/{id}/update — 更新关键词
-  - POST /api/v1/keywords/{id}/delete — 删除关键词
-
-请求/响应模式
-- 请求体：JSON
-- 成功响应：201（创建）、200（查询/更新）、204（删除）
-- 错误响应：统一错误体
-
-curl示例路径
-- 创建关键词：[curl创建关键词](file://src/handlers/keyword.rs)
-- 更新关键词：[curl更新关键词](file://src/handlers/keyword.rs)
-- 删除关键词：[curl删除关键词](file://src/handlers/keyword.rs)
-
-JavaScript示例路径
-- 创建关键词：[JavaScript创建关键词](file://src/handlers/keyword.rs)
-- 更新关键词：[JavaScript更新关键词](file://src/handlers/keyword.rs)
-- 删除关键词：[JavaScript删除关键词](file://src/handlers/keyword.rs)
-
-参数与校验
-- 创建：必填word；可选case_sensitive（默认false）、std_multiplier（默认2.0）、min_hot_count（默认3）
-- 更新：所有字段可选
-- 删除：需要存在对应ID
-
-冲突处理
-- 重复关键词（唯一约束）返回409
+### 关键词管理（Keyword API）
+- 端点概览
+  - GET /api/v1/keywords：列出关键词（按创建时间倒序）
+  - POST /api/v1/keywords：创建关键词（word唯一，其余可选）
+  - POST /api/v1/keywords/{id}/update：部分字段更新
+  - POST /api/v1/keywords/{id}/delete：删除关键词
 
 ```mermaid
 sequenceDiagram
 participant Client as "客户端"
-participant Handler as "关键词处理器"
-participant DB as "关键词数据库"
-Client->>Handler : POST /api/v1/keywords
-Handler->>DB : 插入关键词
-DB-->>Handler : 冲突或成功
-alt 冲突
-Handler-->>Client : 409 + 错误信息
-else 成功
-Handler-->>Client : 201 + data
-end
+participant API as "Keyword API"
+participant DB as "数据库"
+Client->>API : POST /api/v1/keywords
+API->>DB : 插入关键词
+DB-->>API : 成功或UNIQUE冲突
+API-->>Client : 201或409
+Client->>API : POST /api/v1/keywords/{id}/update
+API->>DB : 部分更新
+DB-->>API : 返回更新后的对象
+API-->>Client : 200
 ```
 
 图表来源
-- [keyword.rs（处理器）:22-43](file://src/handlers/keyword.rs#L22-L43)
-- [keyword.rs（数据库）:5-19](file://src/db/keyword.rs#L5-L19)
+- [keyword-api.md:17-208](file://docs/apis/keyword-api.md#L17-L208)
+- [keyword.rs:22-80](file://src/handlers/keyword.rs#L22-L80)
 
 章节来源
-- [keyword.rs（处理器）:12-82](file://src/handlers/keyword.rs#L12-L82)
-- [keyword.rs（模型）:1-39](file://src/models/keyword.rs#L1-L39)
-- [keyword.rs（数据库）:1-115](file://src/db/keyword.rs#L1-L115)
+- [keyword-api.md:17-208](file://docs/apis/keyword-api.md#L17-L208)
+- [keyword.rs:22-80](file://src/handlers/keyword.rs#L22-L80)
 
-### 推送渠道管理API
-- 端点：
-  - GET /api/v1/channels — 列出所有推送渠道
-  - POST /api/v1/channels — 创建推送渠道
-  - POST /api/v1/channels/{id}/update — 更新推送渠道
-  - POST /api/v1/channels/{id}/delete — 删除推送渠道
-
-请求/响应模式
-- 请求体：JSON
-- 成功响应：201（创建）、200（查询/更新）、204（删除）
-- 错误响应：统一错误体
-
-curl示例路径
-- 创建推送渠道：[curl创建推送渠道](file://src/handlers/channel.rs)
-- 更新推送渠道：[curl更新推送渠道](file://src/handlers/channel.rs)
-- 删除推送渠道：[curl删除推送渠道](file://src/handlers/channel.rs)
-
-JavaScript示例路径
-- 创建推送渠道：[JavaScript创建推送渠道](file://src/handlers/channel.rs)
-- 更新推送渠道：[JavaScript更新推送渠道](file://src/handlers/channel.rs)
-- 删除推送渠道：[JavaScript删除推送渠道](file://src/handlers/channel.rs)
-
-参数与校验
-- 创建：必填name、config（JSON字符串）；可选channel_type（默认webhook）
-- 更新：所有字段可选
-- 删除：需要存在对应ID
+### 推送渠道管理（Channel API）
+- 端点概览
+  - GET /api/v1/channels：列出推送渠道（按id升序）
+  - POST /api/v1/channels：创建推送渠道（name/config必填，type可选）
+  - POST /api/v1/channels/{id}/update：部分字段更新
+  - POST /api/v1/channels/{id}/delete：删除推送渠道
 
 章节来源
-- [channel.rs（处理器）:12-71](file://src/handlers/channel.rs#L12-L71)
-- [channel.rs（模型）:1-39](file://src/models/channel.rs#L1-L39)
-- [channel.rs（数据库）:1-115](file://src/db/channel.rs#L1-L115)
+- [channel-api.md:17-192](file://docs/apis/channel-api.md#L17-L192)
+- [channel.rs:12-71](file://src/handlers/channel.rs#L12-L71)
+
+### 查询与分析（Query API）
+- 端点概览
+  - GET /api/v1/articles：文章列表（分页，可按source_id与processed过滤）
+  - GET /api/v1/hotspots：热点事件列表（分页，可按keyword_id过滤）
+  - GET /api/v1/hotspots/{id}/push-records：热点推送记录明细
+  - GET /api/v1/trend/{keyword_id}：关键词小时级趋势（可选hours参数）
+  - POST /api/v1/trigger/filter：手动执行一次过滤器
+  - POST /api/v1/trigger/pusher：手动执行一次推送器
+
+```mermaid
+sequenceDiagram
+participant Client as "客户端"
+participant API as "Query API"
+participant DB as "数据库"
+participant S as "服务层"
+Client->>API : GET /api/v1/trend/{keyword_id}?hours=24
+API->>DB : 校验关键词存在
+DB-->>API : 存在
+API->>DB : 查询小时级计数
+DB-->>API : 返回聚合结果
+API-->>Client : 200 + keyword_id/keyword/points
+Client->>API : POST /api/v1/trigger/filter
+API->>S : 运行一次过滤器
+S-->>API : 完成
+API-->>Client : 200 + message
+```
+
+图表来源
+- [query.rs:47-165](file://src/handlers/query.rs#L47-L165)
+
+章节来源
+- [query.rs:47-165](file://src/handlers/query.rs#L47-L165)
 
 ## 依赖关系分析
-- 路由到处理器：路由层将URL映射到具体处理器函数
-- 处理器到数据库：处理器调用数据库模块执行CRUD操作
-- 认证中间件：对所有受保护端点生效，注入令牌上下文
-- 错误处理：统一错误类型与响应格式
+- 路由依赖：routes.rs集中注册所有端点，并挂载认证中间件与CORS。
+- 处理器依赖：各模块处理器依赖对应的数据库访问模块与统一的响应包装器。
+- 中间件依赖：认证中间件依赖数据库查询与AppError错误类型。
+- 配置依赖：main.rs在启动时加载配置并初始化数据库迁移与初始令牌。
 
 ```mermaid
 graph LR
-Routes["路由层"] --> AuthMW["认证中间件"]
-Routes --> Handlers["处理器层"]
-Handlers --> DB["数据库层"]
-AuthMW --> DB
-Handlers --> Models["模型层"]
-DB --> SQLite["SQLite"]
+Routes["routes.rs"] --> Auth["auth.rs"]
+Routes --> Handlers["handlers/*.rs"]
+Handlers --> DBMod["db/*.rs"]
+Handlers --> Error["error.rs"]
+Auth --> DBMod
+Auth --> Error
+Main["main.rs"] --> Routes
+Main --> DBPool["db.rs"]
+Main --> Config["config.rs"]
 ```
 
 图表来源
-- [routes.rs:14-50](file://src/routes.rs#L14-L50)
-- [auth.rs:18-59](file://src/middleware/auth.rs#L18-L59)
-- [handlers.rs:1-6](file://src/handlers.rs#L1-L6)
+- [routes.rs:14-70](file://src/routes.rs#L14-L70)
+- [auth.rs:14-58](file://src/middleware/auth.rs#L14-L58)
+- [error.rs:8-79](file://src/error.rs#L8-L79)
+- [db.rs:10-27](file://src/db.rs#L10-L27)
+- [main.rs:64-164](file://src/main.rs#L64-L164)
+- [config.rs:51-58](file://src/config.rs#L51-L58)
 
 章节来源
-- [handlers.rs:1-6](file://src/handlers.rs#L1-L6)
+- [routes.rs:14-70](file://src/routes.rs#L14-L70)
+- [auth.rs:14-58](file://src/middleware/auth.rs#L14-L58)
+- [error.rs:8-79](file://src/error.rs#L8-L79)
+- [db.rs:10-27](file://src/db.rs#L10-L27)
+- [main.rs:64-164](file://src/main.rs#L64-L164)
+- [config.rs:51-58](file://src/config.rs#L51-L58)
 
-## 性能考虑
-- 认证中间件采用异步非阻塞校验，后台更新last_used_at避免阻塞主请求链路
-- 数据库查询按需排序与限制，如令牌列表按创建时间倒序
-- 部分更新采用动态SQL拼接，减少不必要的字段写入
-- 建议生产环境启用持久化连接池与合适的超时设置
-
-## 故障排除指南
-常见错误与处理
-- 401 未授权：缺少或无效的Bearer令牌、令牌已撤销、令牌已过期
-- 404 资源不存在：请求的ID不存在（令牌、数据源、关键词、推送渠道）
-- 409 冲突：关键词重复（唯一约束）
-- 500 内部错误：数据库异常或未知错误
-
-统一错误响应格式
-- 结构：{"error": {"code": "...", "message": "..."}}
-- 状态码：依据错误类型映射至HTTP标准状态码
+## 性能与可扩展性
+- 连接池：SQLite连接池最大并发5，适合单机部署与中小规模负载。
+- 异步更新：认证中间件在放行后异步更新令牌最后使用时间，避免阻塞主请求链路。
+- 分页与限制：热点列表默认每页20条，最大100条/页，降低前端压力。
+- 后台任务：解析器、过滤器、推送器作为独立任务运行，支持手动触发以提升运维可控性。
+- CORS：采用宽松策略（permissive），便于前端开发调试；生产环境建议收紧。
 
 章节来源
-- [error.rs:8-50](file://src/error.rs#L8-L50)
-- [auth.rs:23-46](file://src/middleware/auth.rs#L23-L46)
+- [db.rs:14-18](file://src/db.rs#L14-L18)
+- [auth.rs:46-51](file://src/middleware/auth.rs#L46-L51)
+- [query.rs:78-79](file://src/handlers/query.rs#L78-L79)
+- [routes.rs:58](file://src/routes.rs#L58)
+
+## 故障排查指南
+- 统一错误格式
+  - 结构：{"error": {"code": "...", "message": "..."}}
+  - 常见状态码与错误码
+    - 400 BAD_REQUEST：请求体或参数无效
+    - 401 UNAUTHORIZED：缺少、格式错误、过期或已吊销的令牌
+    - 404 NOT_FOUND：资源不存在
+    - 409 CONFLICT：唯一约束冲突（如关键词重复）
+    - 500 DATABASE_ERROR/INTERNAL_ERROR：服务器内部错误
+- 常见问题定位
+  - 401 Unauthorized：确认Authorization头格式为Bearer <token>，且令牌未过期/未吊销
+  - 404 Not Found：确认资源ID有效，端点路径正确
+  - 409 Conflict：关键词重复或唯一约束冲突
+  - 500 Internal：查看服务日志，关注数据库错误
+
+章节来源
+- [error.rs:23-50](file://src/error.rs#L23-L50)
+- [token-api.md:17-37](file://docs/apis/token-api.md#L17-L37)
 
 ## 结论
-本API体系提供完整的认证、令牌管理与三类资源（数据源、关键词、推送渠道）的CRUD能力，采用统一的错误与响应格式，具备良好的扩展性与安全性。建议在生产环境中结合访问控制、速率限制与审计日志进一步强化安全。
+本API文档系统性地描述了AI趋势监控系统的REST接口、认证流程、错误处理与调用示例。通过Bearer Token认证与统一的错误格式，系统在安全性与易用性之间取得平衡；结合手动触发与后台任务，满足实时性与可运维性的双重需求。建议在生产环境中进一步完善速率限制、CORS策略与令牌轮换机制。
 
 ## 附录
 
-### API版本管理与兼容性
+### 统一错误响应格式
+- 结构
+  - {"error": {"code": "错误码", "message": "人类可读描述"}}
+- 状态码映射
+  - 400：BAD_REQUEST
+  - 401：UNAUTHORIZED
+  - 404：NOT_FOUND
+  - 409：CONFLICT
+  - 500：DATABASE_ERROR 或 INTERNAL_ERROR
+
+章节来源
+- [error.rs:23-50](file://src/error.rs#L23-L50)
+- [token-api.md:17-37](file://docs/apis/token-api.md#L17-L37)
+
+### 版本控制与向后兼容
 - 当前版本：/api/v1
-- 版本策略：新增功能通过新端点或扩展字段实现；不破坏既有行为
-- 兼容性：保持现有端点与响应结构稳定，避免破坏性变更
+- 设计原则：新增端点优先在新版本路径下发布，旧版本保持稳定，逐步引导客户端迁移
 
 章节来源
-- [routes.rs:46-49](file://src/routes.rs#L46-L49)
+- [routes.rs:57](file://src/routes.rs#L57)
 
-### 数据库初始化与表结构
-- 迁移脚本：包含api_tokens、data_sources、keywords、push_channels等核心表
-- 建议：首次部署时执行迁移，确保表结构与索引就绪
+### 速率限制
+- 当前实现：未内置速率限制
+- 建议：在网关或中间件层引入限流策略，按IP/令牌维度控制QPS
 
 章节来源
-- [20260607044921_init.sql](file://docs/migrations/20260607044921_init.sql)
+- [auth.rs:14-58](file://src/middleware/auth.rs#L14-L58)
+
+### 健康检查
+- 端点：GET /health
+- 响应：{"status": "ok"}
+- 无需认证
+
+章节来源
+- [routes.rs:61-63](file://src/routes.rs#L61-L63)
+- [token-api.md:42-52](file://docs/apis/token-api.md#L42-L52)
+
+### 客户端实现要点
+- 认证头：Authorization: Bearer <token>
+- 响应解析：统一处理data字段与错误体；注意布尔值与时间字符串格式
+- 分页：根据items/total/page/per_page自行渲染分页UI
+- 手动触发：在运维场景调用 /api/v1/trigger/filter 与 /api/v1/trigger/pusher
+
+章节来源
+- [query.rs:14-21](file://src/handlers/query.rs#L14-L21)
+- [query.rs:150-164](file://src/handlers/query.rs#L150-L164)

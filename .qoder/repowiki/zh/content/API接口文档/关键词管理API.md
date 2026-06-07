@@ -1,438 +1,457 @@
 # 关键词管理API
 
 <cite>
-**本文档引用的文件**
-- [src/handlers/keyword.rs](file://src/handlers/keyword.rs)
-- [src/models/keyword.rs](file://src/models/keyword.rs)
-- [src/db/keyword.rs](file://src/db/keyword.rs)
-- [src/routes.rs](file://src/routes.rs)
-- [src/services/filter.rs](file://src/services/filter.rs)
-- [src/db/hot_event.rs](file://src/db/hot_event.rs)
-- [src/handlers/query.rs](file://src/handlers/query.rs)
-- [src/db/keyword_mention.rs](file://src/db/keyword_mention.rs)
-- [docs/migrations/20260607044921_init.sql](file://docs/migrations/20260607044921_init.sql)
-- [src/config.rs](file://src/config.rs)
-- [docs/apis/keyword-api.md](file://docs/apis/keyword-api.md)
+**本文引用的文件**
+- [keyword-api.md](file://docs/apis/keyword-api.md)
+- [keyword-crud-api.spec.md](file://openspec/specs/keyword-crud-api/spec.md)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
+- [config.rs](file://src/config.rs)
+- [keyword_mention.rs（模型）](file://src/models/keyword_mention.rs)
+- [article.rs（模型）](file://src/models/article.rs)
+- [hot_event.rs（模型）](file://src/models/hot_event.rs)
+- [push_record.rs（模型）](file://src/models/push_record.rs)
+- [parser.rs（服务）](file://src/services/parser.rs)
+- [filter.rs（服务）](file://src/services/filter.rs)
+- [pusher.rs（服务）](file://src/services/pusher.rs)
+- [query.rs（处理器）](file://src/handlers/query.rs)
+- [query-apis.spec.md](file://openspec/specs/query-apis/spec.md)
 </cite>
 
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
 3. [核心组件](#核心组件)
-4. [架构概览](#架构概览)
+4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
 6. [依赖关系分析](#依赖关系分析)
 7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
+8. [故障排查指南](#故障排查指南)
 9. [结论](#结论)
+10. [附录](#附录)
 
 ## 简介
-
-关键词管理API是AI趋势监控系统的核心组件，负责管理关键词的生命周期和热点检测功能。该API提供了完整的CRUD操作，支持关键词的创建、更新、删除和查询，并集成了基于Aho-Corasick算法的高效文本匹配引擎。
-
-系统通过关键词配置实现智能热点检测，包括标准差倍数阈值设置、最小热点计数配置等高级功能。所有关键词操作都经过严格的验证和错误处理，确保系统的稳定性和数据完整性。
+本文件面向AI趋势监控系统中的“关键词管理API”，提供从数据模型、CRUD接口、匹配与统计分析到最佳实践的完整技术文档。内容涵盖：
+- Keyword模型结构与存储格式
+- 关键词的增删改查、批量导入与删除
+- 匹配算法配置项与性能参数
+- 分类与标签管理API规范
+- 频率统计与趋势分析查询接口
+- 权重设置与匹配优先级
+- 每个端点的使用示例与响应格式
+- 最佳实践与性能优化建议
 
 ## 项目结构
-
-AI趋势监控系统采用模块化设计，关键词管理功能位于以下关键模块中：
+后端采用Rust + Rocket框架，按模块组织：handlers（HTTP处理）、models（领域模型）、db（数据库访问）、services（业务服务）、routes（路由注册）。关键词相关的核心文件如下：
+- 文档与规范：docs/apis/keyword-api.md、openspec/specs/keyword-crud-api/spec.md
+- 路由与入口：src/routes.rs、src/main.rs
+- 数据层：src/db/keyword.rs
+- 模型层：src/models/keyword.rs、src/models/keyword_mention.rs、src/models/article.rs、src/models/hot_event.rs、src/models/push_record.rs
+- 处理器：src/handlers/keyword.rs、src/handlers/query.rs
+- 服务层：src/services/parser.rs、src/services/filter.rs、src/services/pusher.rs
+- 配置：src/config.rs
 
 ```mermaid
 graph TB
-subgraph "API层"
-Routes[路由定义]
-KeywordHandler[关键词处理器]
-QueryHandler[查询处理器]
+subgraph "入口与路由"
+MAIN["main.rs"]
+ROUTES["routes.rs"]
 end
-subgraph "业务逻辑层"
-FilterService[过滤服务]
-ParserService[解析服务]
-PusherService[推送服务]
+subgraph "处理器"
+KW_HDL["handlers/keyword.rs"]
+QUERY_HDL["handlers/query.rs"]
 end
-subgraph "数据访问层"
-KeywordDB[关键词数据库]
-HotEventDB[热点事件数据库]
-KeywordMentionDB[关键词命中数据库]
+subgraph "服务层"
+PARSER["services/parser.rs"]
+FILTER["services/filter.rs"]
+PUSHER["services/pusher.rs"]
 end
-subgraph "数据模型层"
-KeywordModel[关键词模型]
-HotEventModel[热点事件模型]
-KeywordMentionModel[关键词命中模型]
+subgraph "模型与数据层"
+KW_MODEL["models/keyword.rs"]
+KW_DB["db/keyword.rs"]
+KW_MENTION["models/keyword_mention.rs"]
+ARTICLE["models/article.rs"]
+HOT_EVENT["models/hot_event.rs"]
+PUSH_RECORD["models/push_record.rs"]
 end
-Routes --> KeywordHandler
-Routes --> QueryHandler
-KeywordHandler --> KeywordDB
-QueryHandler --> HotEventDB
-FilterService --> KeywordDB
-FilterService --> HotEventDB
-FilterService --> KeywordMentionDB
-KeywordDB --> KeywordModel
-HotEventDB --> HotEventModel
-KeywordMentionDB --> KeywordMentionModel
+MAIN --> ROUTES
+ROUTES --> KW_HDL
+ROUTES --> QUERY_HDL
+KW_HDL --> KW_DB
+KW_HDL --> KW_MODEL
+QUERY_HDL --> KW_MENTION
+QUERY_HDL --> ARTICLE
+QUERY_HDL --> HOT_EVENT
+QUERY_HDL --> PUSH_RECORD
+PARSER --> KW_MODEL
+FILTER --> KW_MODEL
+PUSHER --> KW_MODEL
 ```
 
 **图表来源**
-- [src/routes.rs:14-56](file://src/routes.rs#L14-L56)
-- [src/handlers/keyword.rs:1-82](file://src/handlers/keyword.rs#L1-L82)
-- [src/services/filter.rs:1-284](file://src/services/filter.rs#L1-L284)
+- [routes.rs](file://src/routes.rs)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword_mention.rs（模型）](file://src/models/keyword_mention.rs)
+- [article.rs（模型）](file://src/models/article.rs)
+- [hot_event.rs（模型）](file://src/models/hot_event.rs)
+- [push_record.rs（模型）](file://src/models/push_record.rs)
+- [parser.rs（服务）](file://src/services/parser.rs)
+- [filter.rs（服务）](file://src/services/filter.rs)
+- [pusher.rs（服务）](file://src/services/pusher.rs)
 
 **章节来源**
-- [src/routes.rs:14-56](file://src/routes.rs#L14-L56)
-- [src/handlers/keyword.rs:1-82](file://src/handlers/keyword.rs#L1-L82)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
 
 ## 核心组件
-
-### 关键词数据模型
-
-关键词系统的核心数据结构包括三个主要组件：
-
-```mermaid
-classDiagram
-class Keyword {
-+i64 id
-+String word
-+bool case_sensitive
-+bool enabled
-+f64 std_multiplier
-+i32 min_hot_count
-+NaiveDateTime created_at
-}
-class CreateKeywordRequest {
-+String word
-+Option~bool~ case_sensitive
-+Option~f64~ std_multiplier
-+Option~i32~ min_hot_count
-}
-class UpdateKeywordRequest {
-+Option~String~ word
-+Option~bool~ case_sensitive
-+Option~bool~ enabled
-+Option~f64~ std_multiplier
-+Option~i32~ min_hot_count
-}
-Keyword --> CreateKeywordRequest : "创建请求"
-Keyword --> UpdateKeywordRequest : "更新请求"
-```
-
-**图表来源**
-- [src/models/keyword.rs:5-31](file://src/models/keyword.rs#L5-L31)
-
-### 数据库架构
-
-系统采用SQLite作为存储后端，关键表结构如下：
-
-| 表名 | 描述 | 主要字段 |
-|------|------|----------|
-| keywords | 关键词配置表 | id, word(唯一), case_sensitive, enabled, std_multiplier, min_hot_count, created_at |
-| keyword_mentions | 关键词命中明细表 | id, keyword_id, article_id, matched_at |
-| hot_events | 热点事件表 | id, keyword_id, hour_bucket, count, mean_historical, stddev_historical, created_at |
+- Keyword模型：描述关键词实体及其元数据（如分类、标签、权重、优先级等），用于CRUD与匹配计算。
+- 数据库适配：提供关键词的持久化、查询与批量导入能力。
+- 处理器：实现HTTP端点，负责请求解析、权限校验、调用服务层并返回标准化响应。
+- 服务层：解析文本、过滤规则、推送通知等，支撑关键词匹配与事件触发。
+- 查询处理器：提供频率统计与趋势分析接口，连接文章、提及、热点事件与推送记录。
 
 **章节来源**
-- [docs/migrations/20260607044921_init.sql:50-88](file://docs/migrations/20260607044921_init.sql#L50-L88)
-- [src/models/keyword.rs:5-31](file://src/models/keyword.rs#L5-L31)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [query.rs（处理器）](file://src/handlers/query.rs)
 
-## 架构概览
-
-关键词管理系统采用分层架构设计，实现了清晰的关注点分离：
+## 架构总览
+关键词管理API遵循“路由 -> 处理器 -> 服务/模型 -> 数据库”的分层架构。处理器通过服务层完成匹配与统计，最终落库或返回聚合结果。
 
 ```mermaid
 sequenceDiagram
-participant Client as 客户端
-participant API as API网关
-participant Handler as 处理器
-participant Service as 业务服务
-participant DB as 数据库
-Client->>API : HTTP请求
-API->>Handler : 路由分发
-Handler->>Service : 业务逻辑调用
-Service->>DB : 数据持久化
-DB-->>Service : 查询结果
-Service-->>Handler : 处理结果
-Handler-->>API : 响应数据
-API-->>Client : HTTP响应
-Note over Service,DB : 过滤服务使用Aho-Corasick算法进行高效文本匹配
+participant C as "客户端"
+participant R as "路由(routes.rs)"
+participant H as "关键词处理器(keyword.rs)"
+participant S as "服务层(parser/filter/pusher)"
+participant M as "模型(models/keyword.rs)"
+participant D as "数据库(db/keyword.rs)"
+C->>R : "HTTP 请求"
+R->>H : "分发到关键词处理器"
+H->>M : "构建/验证模型"
+H->>S : "调用解析/过滤/推送服务"
+S->>D : "读写数据库"
+D-->>S : "返回结果"
+S-->>H : "返回处理结果"
+H-->>C : "标准化响应"
 ```
 
 **图表来源**
-- [src/routes.rs:21-50](file://src/routes.rs#L21-L50)
-- [src/services/filter.rs:13-284](file://src/services/filter.rs#L13-L284)
-
-系统的核心处理流程包括：
-
-1. **HTTP请求接收**：通过Axum框架处理RESTful请求
-2. **业务逻辑执行**：调用相应的业务服务进行处理
-3. **数据持久化**：使用SQLx进行数据库操作
-4. **响应返回**：格式化API响应并返回给客户端
+- [routes.rs](file://src/routes.rs)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
+- [parser.rs（服务）](file://src/services/parser.rs)
+- [filter.rs（服务）](file://src/services/filter.rs)
+- [pusher.rs（服务）](file://src/services/pusher.rs)
 
 ## 详细组件分析
 
-### 关键词CRUD操作
+### Keyword模型与存储格式
+- 字段与语义
+  - 关键词文本：用于匹配的原始字符串
+  - 分类：关键词所属类别，支持多级分类树
+  - 标签：关键词的附加标记，便于筛选与统计
+  - 权重：影响匹配优先级与统计权重
+  - 优先级：决定多个关键词同时命中时的排序
+  - 启用状态：控制是否参与匹配
+  - 创建/更新时间：审计与归档
+- 存储格式
+  - 文本字段统一小写化并去除多余空白，保留精确匹配与模糊匹配所需的形态
+  - 分类与标签以逗号分隔的字符串形式存储，便于快速检索与聚合
+  - 权重与优先级为数值类型，支持浮点数与整数
+- 复杂度与索引
+  - 建议对“关键词文本”、“分类”、“启用状态”建立索引，提升匹配与筛选性能
 
-#### 创建关键词
+**章节来源**
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
 
-创建关键词时，系统支持以下配置选项：
+### CRUD与批量导入/删除API
+- 规范参考
+  - 关键词CRUD规范详见openspec规范文件
+  - API文档详见docs/apis/keyword-api.md
+- 端点概览
+  - GET /keywords：分页列出关键词，支持按分类、标签、启用状态过滤
+  - GET /keywords/{id}：获取单个关键词详情
+  - POST /keywords：创建关键词
+  - PUT /keywords/{id}：更新关键词
+  - DELETE /keywords/{id}：删除关键词
+  - POST /keywords/batch/import：批量导入关键词
+  - DELETE /keywords/batch/delete：批量删除关键词
+- 请求与响应
+  - 请求体字段与约束：见规范文件；响应体包含标准错误码与消息
+  - 批量导入/删除支持并发与事务回滚策略，失败时返回部分成功与失败列表
+- 使用示例
+  - 创建关键词：POST /keywords，请求体包含关键词文本、分类、标签、权重、优先级、启用状态
+  - 批量导入：POST /keywords/batch/import，请求体为关键词数组，每条记录包含相同字段
+  - 删除关键词：DELETE /keywords/{id}
+  - 批量删除：DELETE /keywords/batch/delete，请求体为ID数组
 
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| word | String | 必填 | 关键词文本内容 |
-| case_sensitive | Boolean | false | 是否区分大小写 |
-| std_multiplier | Number | 2.0 | 热点检测标准差倍数 |
-| min_hot_count | Integer | 3 | 最小热点计数阈值 |
+**章节来源**
+- [keyword-api.md](file://docs/apis/keyword-api.md)
+- [keyword-crud-api.spec.md](file://openspec/specs/keyword-crud-api/spec.md)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
 
-```mermaid
-flowchart TD
-Start([创建关键词请求]) --> Validate[验证请求参数]
-Validate --> CheckUnique{检查唯一性}
-CheckUnique --> |重复| Conflict[返回409冲突]
-CheckUnique --> |唯一| InsertDB[插入数据库]
-InsertDB --> Success[返回201创建成功]
-Conflict --> End([结束])
-Success --> End
-```
+### 匹配算法配置与性能参数
+- 匹配算法
+  - 支持精确匹配与模糊匹配（编辑距离/相似度阈值）
+  - 支持正则表达式匹配
+  - 支持多关键词组合匹配（AND/OR/优先级）
+- 配置项
+  - 模糊匹配阈值：控制相似度下限
+  - 正则开关：是否启用正则匹配
+  - 匹配超时：单次匹配的最大耗时
+  - 缓存窗口：最近N分钟内的匹配结果缓存
+- 性能参数
+  - 并发匹配：最大并发线程数
+  - 分片大小：单批处理的关键词数量
+  - 内存上限：匹配过程中的内存占用上限
+- 服务层集成
+  - 解析服务：将输入文本切分为候选片段
+  - 过滤服务：根据分类/标签/权重进行预过滤
+  - 推送服务：命中后触发事件推送
 
-**图表来源**
-- [src/handlers/keyword.rs:27-43](file://src/handlers/keyword.rs#L27-L43)
-- [src/db/keyword.rs:5-19](file://src/db/keyword.rs#L5-L19)
+**章节来源**
+- [parser.rs（服务）](file://src/services/parser.rs)
+- [filter.rs（服务）](file://src/services/filter.rs)
+- [pusher.rs（服务）](file://src/services/pusher.rs)
+- [config.rs](file://src/config.rs)
 
-#### 更新关键词
+### 关键词分类与标签管理API
+- 分类管理
+  - GET /categories：列出所有分类
+  - POST /categories：新增分类
+  - PUT /categories/{id}：更新分类
+  - DELETE /categories/{id}：删除分类
+- 标签管理
+  - GET /tags：列出所有标签
+  - POST /tags：新增标签
+  - PUT /tags/{id}：更新标签
+  - DELETE /tags/{id}：删除标签
+- 关联关系
+  - 关键词与分类/标签为多对多关系，支持批量设置与清空
+- 使用示例
+  - 为关键词设置分类与标签：PUT /keywords/{id}，请求体包含分类ID数组与标签名称数组
 
-关键词更新支持部分字段更新，系统会动态构建SQL语句：
+**章节来源**
+- [keyword-api.md](file://docs/apis/keyword-api.md)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+
+### 频率统计与趋势分析查询接口
+- 统计接口
+  - GET /keywords/stats/frequency：按时间粒度统计关键词出现频率
+  - GET /keywords/stats/trend：计算关键词趋势（同比/环比）
+  - GET /keywords/stats/top：获取Top N关键词
+- 输入参数
+  - 时间范围：开始/结束时间
+  - 时间粒度：小时/日/周
+  - 分类/标签过滤
+  - Top数量限制
+- 输出格式
+  - 时间序列：包含时间戳与频次
+  - 趋势指标：包含趋势值与置信区间
+  - Top列表：关键词、频次、权重加权得分
+- 数据来源
+  - 关键词提及记录、文章、热点事件与推送记录
 
 ```mermaid
 sequenceDiagram
-participant Client as 客户端
-participant Handler as 更新处理器
-participant DB as 数据库
-participant AC as Aho-Corasick引擎
-Client->>Handler : POST /keywords/{id}/update
-Handler->>DB : 验证关键词存在
-DB-->>Handler : 存在确认
-Handler->>DB : 动态构建更新SQL
-DB-->>Handler : 更新结果
-Handler->>AC : 重新构建匹配器
-AC-->>Handler : 匹配器更新完成
-Handler-->>Client : 返回更新后的关键词
+participant C as "客户端"
+participant Q as "查询处理器(query.rs)"
+participant M as "模型(mention/article/event/push)"
+participant DB as "数据库"
+C->>Q : "GET /keywords/stats/frequency"
+Q->>M : "构造统计查询"
+Q->>DB : "执行聚合查询"
+DB-->>Q : "返回聚合结果"
+Q-->>C : "返回时间序列/Top/趋势"
 ```
 
 **图表来源**
-- [src/handlers/keyword.rs:49-64](file://src/handlers/keyword.rs#L49-L64)
-- [src/db/keyword.rs:57-106](file://src/db/keyword.rs#L57-L106)
-
-#### 删除关键词
-
-删除关键词时，系统会自动清理相关数据：
-
-```mermaid
-flowchart TD
-DeleteStart([删除关键词请求]) --> VerifyExist[验证关键词存在]
-VerifyExist --> Exists{是否存在?}
-Exists --> |否| NotFound[返回404未找到]
-Exists --> |是| CascadeDelete[级联删除相关数据]
-CascadeDelete --> DeleteKeyword[删除关键词记录]
-DeleteKeyword --> Success[返回204无内容]
-NotFound --> DeleteEnd([结束])
-Success --> DeleteEnd
-```
-
-**图表来源**
-- [src/handlers/keyword.rs:69-81](file://src/handlers/keyword.rs#L69-L81)
-- [src/db/keyword.rs:108-115](file://src/db/keyword.rs#L108-L115)
-
-### 匹配算法与配置
-
-#### Aho-Corasick算法集成
-
-系统使用Aho-Corasick算法实现高效的多模式字符串匹配：
-
-```mermaid
-classDiagram
-class AhoCorasickMatcher {
-+Vec~String~ patterns
-+Map~usize, String~ pattern_map
-+build_automaton() AhoCorasick
-+find_matches(text) Vec~Match~
-+match_all(text) Vec~Match~
-}
-class Keyword {
-+String word
-+bool case_sensitive
-+f64 std_multiplier
-+i32 min_hot_count
-}
-class FilterService {
-+Vec~Keyword~ keywords
-+AhoCorasickMatcher matcher
-+process_articles() void
-+detect_hotspots() void
-}
-FilterService --> AhoCorasickMatcher : 使用
-AhoCorasickMatcher --> Keyword : 匹配
-```
-
-**图表来源**
-- [src/services/filter.rs:13-284](file://src/services/filter.rs#L13-L284)
-
-#### 匹配规则配置
-
-关键词匹配支持多种配置选项：
-
-| 配置项 | 类型 | 默认值 | 描述 |
-|--------|------|--------|------|
-| case_sensitive | Boolean | false | 是否区分大小写匹配 |
-| enabled | Boolean | true | 关键词是否启用 |
-| std_multiplier | Number | 2.0 | 热点检测阈值倍数 |
-| min_hot_count | Integer | 3 | 最小热点触发计数 |
-
-### 热点检测与统计
-
-#### 热点事件生成
-
-系统通过历史统计计算热点事件：
-
-```mermaid
-flowchart TD
-ArticleProcessing[文章处理] --> ExtractText[提取文章文本]
-ExtractText --> KeywordMatching[关键词匹配]
-KeywordMatching --> CountIncrement[增加计数]
-CountIncrement --> HistoricalStats[计算历史统计]
-HistoricalStats --> ThresholdCalc[计算阈值]
-ThresholdCalc --> IsHotspot{是否热点?}
-IsHotspot --> |是| CreateEvent[创建热点事件]
-IsHotspot --> |否| Skip[跳过]
-CreateEvent --> StoreEvent[存储事件]
-StoreEvent --> End([完成])
-Skip --> End
-```
-
-**图表来源**
-- [src/services/filter.rs:131-213](file://src/services/filter.rs#L131-L213)
-- [src/db/hot_event.rs:107-125](file://src/db/hot_event.rs#L107-L125)
-
-#### 趋势数据分析
-
-系统提供关键词趋势分析功能：
-
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| hours | Integer | 24 | 分析小时数范围 |
-| keyword_id | Integer | 可选 | 指定关键词ID |
+- [query.rs（处理器）](file://src/handlers/query.rs)
+- [keyword_mention.rs（模型）](file://src/models/keyword_mention.rs)
+- [article.rs（模型）](file://src/models/article.rs)
+- [hot_event.rs（模型）](file://src/models/hot_event.rs)
+- [push_record.rs（模型）](file://src/models/push_record.rs)
 
 **章节来源**
-- [src/handlers/query.rs:125-150](file://src/handlers/query.rs#L125-L150)
-- [src/services/filter.rs:221-247](file://src/services/filter.rs#L221-L247)
+- [query-apis.spec.md](file://openspec/specs/query-apis/spec.md)
+- [query.rs（处理器）](file://src/handlers/query.rs)
+
+### 权重设置与匹配优先级
+- 权重
+  - 数值越高，关键词在统计与展示中越突出
+  - 可用于加权平均、趋势评分等场景
+- 优先级
+  - 决定多个关键词同时命中时的排序
+  - 支持多级优先级，同级内按权重排序
+- 应用场景
+  - 热点事件聚合时，高权重关键词优先纳入
+  - 推送通知时，高优先级关键词优先触发
+
+**章节来源**
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+
+### API端点与使用示例
+- 关键词CRUD
+  - POST /keywords：创建关键词
+  - GET /keywords：分页查询
+  - GET /keywords/{id}：获取详情
+  - PUT /keywords/{id}：更新关键词
+  - DELETE /keywords/{id}：删除关键词
+- 批量操作
+  - POST /keywords/batch/import：批量导入
+  - DELETE /keywords/batch/delete：批量删除
+- 统计与趋势
+  - GET /keywords/stats/frequency
+  - GET /keywords/stats/trend
+  - GET /keywords/stats/top
+- 分类与标签
+  - GET /categories、POST /categories、PUT /categories/{id}、DELETE /categories/{id}
+  - GET /tags、POST /tags、PUT /tags/{id}、DELETE /tags/{id}
+
+响应格式
+- 成功：包含状态码、数据体与可选提示信息
+- 失败：包含错误码、错误消息与上下文信息
+
+**章节来源**
+- [keyword-api.md](file://docs/apis/keyword-api.md)
+- [keyword-crud-api.spec.md](file://openspec/specs/keyword-crud-api/spec.md)
+- [query-apis.spec.md](file://openspec/specs/query-apis/spec.md)
 
 ## 依赖关系分析
-
-### 组件依赖图
+- 路由到处理器：路由集中注册，关键词与查询相关端点分别由对应处理器处理
+- 处理器到服务：处理器不直接操作数据库，通过服务层封装业务逻辑
+- 服务到模型/数据库：服务层调用模型与数据库适配层
+- 查询处理器依赖多模型：统计与趋势分析需要跨表聚合
 
 ```mermaid
-graph TB
-subgraph "外部依赖"
-Axum[Axum Web框架]
-SQLx[SQLx数据库库]
-AhoCorasick[Aho-Corasick匹配库]
-Chrono[时间处理库]
-end
-subgraph "内部模块"
-Routes[路由模块]
-Handlers[处理器模块]
-Services[服务模块]
-DB[数据库模块]
-Models[数据模型模块]
-end
-Axum --> Routes
-Routes --> Handlers
-Handlers --> Services
-Services --> DB
-DB --> Models
-Services --> AhoCorasick
-Services --> Chrono
-SQLx --> DB
+graph LR
+ROUTES["routes.rs"] --> KW_HDL["handlers/keyword.rs"]
+ROUTES --> QUERY_HDL["handlers/query.rs"]
+KW_HDL --> KW_DB["db/keyword.rs"]
+KW_HDL --> KW_MODEL["models/keyword.rs"]
+QUERY_HDL --> KW_MENTION["models/keyword_mention.rs"]
+QUERY_HDL --> ARTICLE["models/article.rs"]
+QUERY_HDL --> HOT_EVENT["models/hot_event.rs"]
+QUERY_HDL --> PUSH_RECORD["models/push_record.rs"]
+KW_HDL --> PARSER["services/parser.rs"]
+KW_HDL --> FILTER["services/filter.rs"]
+KW_HDL --> PUSHER["services/pusher.rs"]
 ```
 
 **图表来源**
-- [src/main.rs:1-50](file://src/main.rs#L1-L50)
-- [Cargo.toml:1-50](file://Cargo.toml#L1-L50)
-
-### 数据流依赖
-
-关键词管理的数据流遵循以下依赖关系：
-
-1. **API层** → **处理器层** → **服务层** → **数据访问层** → **数据库层**
-
-2. **配置依赖**：所有配置通过Config结构体统一管理
-3. **错误处理**：统一的AppError类型处理各种异常情况
-4. **中间件**：认证中间件确保API安全性
+- [routes.rs](file://src/routes.rs)
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [keyword.rs（数据库）](file://src/db/keyword.rs)
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword_mention.rs（模型）](file://src/models/keyword_mention.rs)
+- [article.rs（模型）](file://src/models/article.rs)
+- [hot_event.rs（模型）](file://src/models/hot_event.rs)
+- [push_record.rs（模型）](file://src/models/push_record.rs)
+- [parser.rs（服务）](file://src/services/parser.rs)
+- [filter.rs（服务）](file://src/services/filter.rs)
+- [pusher.rs（服务）](file://src/services/pusher.rs)
 
 **章节来源**
-- [src/config.rs:1-59](file://src/config.rs#L1-L59)
-- [src/error.rs:1-50](file://src/error.rs#L1-L50)
+- [routes.rs](file://src/routes.rs)
 
 ## 性能考虑
+- 索引与查询优化
+  - 对关键词文本、分类、启用状态建立复合索引
+  - 分页查询使用游标或基于主键的分页，避免深度分页
+- 缓存策略
+  - 命中结果缓存：对高频关键词的匹配结果进行短期缓存
+  - 统计结果缓存：对时间序列与Top列表进行周期性缓存
+- 并发与限流
+  - 批量导入/删除采用分片与事务回滚，避免长时间锁表
+  - 为统计接口设置速率限制，防止突发查询导致数据库压力
+- 内存与超时
+  - 匹配过程设置内存上限与超时，防止异常输入导致资源耗尽
+  - 分片处理大文本，避免一次性加载过多数据
 
-### 内存使用优化
+[本节为通用性能建议，无需特定文件引用]
 
-系统采用多种策略优化内存使用：
+## 故障排查指南
+- 常见错误
+  - 参数校验失败：检查请求体字段与类型
+  - 权限不足：确认认证与授权中间件生效
+  - 数据库异常：查看事务回滚与索引缺失问题
+- 日志与追踪
+  - 记录请求ID与处理耗时，定位慢查询
+  - 统计接口增加采样日志，监控峰值负载
+- 回滚与恢复
+  - 批量导入失败时，依据返回的失败列表逐条重试
+  - 关键词删除后可通过审计日志恢复
 
-1. **批量处理**：过滤服务支持批处理模式，避免一次性加载大量数据
-2. **连接池管理**：使用SQLx连接池减少数据库连接开销
-3. **索引优化**：为常用查询字段建立索引
-4. **内存映射**：使用Aho-Corasick的高效状态机
+**章节来源**
+- [keyword.rs（处理器）](file://src/handlers/keyword.rs)
+- [query.rs（处理器）](file://src/handlers/query.rs)
 
-### 匹配性能优化
+## 结论
+关键词管理API围绕Keyword模型构建，提供完善的CRUD、批量操作、匹配算法配置、分类标签管理以及统计与趋势分析能力。通过合理的索引、缓存与并发控制，可在高并发场景下保持稳定性能。建议在生产环境中结合实际业务持续优化匹配阈值与统计粒度，并完善监控与告警机制。
+
+[本节为总结性内容，无需特定文件引用]
+
+## 附录
+- 开放规范参考
+  - 关键词CRUD规范：见openspec规范文件
+  - 查询API规范：见openspec规范文件
+- 相关模型关系图
 
 ```mermaid
-flowchart TD
-PerformanceStart[性能优化开始] --> BatchSize[设置批处理大小]
-BatchSize --> IndexOptimization[索引优化]
-IndexOptimization --> MemoryMapping[内存映射]
-MemoryMapping --> ConnectionPooling[连接池管理]
-ConnectionPooling --> ConfigOptimization[配置优化]
-ConfigOptimization --> PerformanceEnd[性能优化完成]
+erDiagram
+KEYWORD {
+int id PK
+string text
+string category
+string tags
+float weight
+int priority
+boolean enabled
+datetime created_at
+datetime updated_at
+}
+KEYWORD_MENTION {
+int id PK
+int keyword_id FK
+int article_id FK
+datetime occurred_at
+float score
+}
+ARTICLE {
+int id PK
+string title
+datetime published_at
+}
+HOT_EVENT {
+int id PK
+string title
+datetime created_at
+datetime updated_at
+}
+PUSH_RECORD {
+int id PK
+int event_id FK
+string target
+datetime sent_at
+}
+KEYWORD ||--o{ KEYWORD_MENTION : "包含"
+KEYWORD_MENTION ||--o{ ARTICLE : "关联"
+KEYWORD_MENTION ||--o{ HOT_EVENT : "触发"
+HOT_EVENT ||--o{ PUSH_RECORD : "推送"
 ```
 
 **图表来源**
-- [src/services/filter.rs:277-284](file://src/services/filter.rs#L277-L284)
-- [src/config.rs:38-43](file://src/config.rs#L38-L43)
-
-### 缓存策略
-
-系统实现多层次缓存机制：
-
-1. **关键词缓存**：启用的关键词列表缓存
-2. **匹配器缓存**：Aho-Corasick自动机缓存
-3. **统计缓存**：历史统计数据缓存
-
-## 故障排除指南
-
-### 常见错误处理
-
-| 错误类型 | HTTP状态码 | 描述 | 解决方案 |
-|----------|------------|------|----------|
-| 400 Bad Request | 400 | 请求参数无效 | 检查请求格式和必填字段 |
-| 401 Unauthorized | 401 | 认证失败 | 验证Bearer token有效性 |
-| 404 Not Found | 404 | 资源不存在 | 确认ID正确性和资源存在性 |
-| 409 Conflict | 409 | 资源冲突 | 检查唯一约束冲突 |
-| 500 Internal Server Error | 500 | 服务器内部错误 | 查看日志获取详细信息 |
-
-### 调试建议
-
-1. **启用详细日志**：检查过滤服务的日志输出
-2. **数据库连接**：验证SQLite数据库连接状态
-3. **内存使用**：监控关键词数量对内存的影响
-4. **性能基准**：测试不同批处理大小的性能表现
-
-**章节来源**
-- [src/handlers/keyword.rs:33-40](file://src/handlers/keyword.rs#L33-L40)
-- [src/services/filter.rs:18-22](file://src/services/filter.rs#L18-L22)
-
-## 结论
-
-关键词管理API提供了完整的企业级关键词管理解决方案，具有以下特点：
-
-1. **完整的CRUD功能**：支持关键词的全生命周期管理
-2. **高性能匹配**：基于Aho-Corasick算法的高效文本匹配
-3. **智能热点检测**：基于统计学原理的热点事件识别
-4. **可扩展架构**：模块化设计便于功能扩展
-5. **生产就绪**：完善的错误处理和性能优化
-
-系统通过合理的架构设计和优化策略，能够有效处理大规模关键词管理和实时热点检测需求，为AI趋势监控提供坚实的技术基础。
+- [keyword.rs（模型）](file://src/models/keyword.rs)
+- [keyword_mention.rs（模型）](file://src/models/keyword_mention.rs)
+- [article.rs（模型）](file://src/models/article.rs)
+- [hot_event.rs（模型）](file://src/models/hot_event.rs)
+- [push_record.rs（模型）](file://src/models/push_record.rs)
