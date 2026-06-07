@@ -1,6 +1,7 @@
 mod config;
-mod error;
 mod db;
+mod error;
+mod models;
 mod routes;
 
 use clap::Parser;
@@ -19,9 +20,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+    tracing_subscriber::fmt().with_env_filter("info").init();
 
     let cli = Cli::parse();
     let config = config::AppConfig::load(&cli.config)?;

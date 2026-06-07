@@ -1,7 +1,4 @@
-use axum::{
-    routing::get,
-    Json, Router,
-};
+use axum::{routing::get, Json, Router};
 use serde_json::json;
 use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;

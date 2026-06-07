@@ -1,0 +1,135 @@
+use chrono::NaiveDateTime;
+use sqlx::SqlitePool;
+
+use crate::models::article::{Article, ArticleQuery};
+
+/// Returns Some(Article) if inserted, None if link already exists (deduplicated)
+pub async fn insert_article(
+    pool: &SqlitePool,
+    source_id: i64,
+    link: &str,
+    title: &str,
+    summary: &str,
+    content: &str,
+    published_at: Option<NaiveDateTime>,
+) -> Result<Option<Article>, sqlx::Error> {
+    sqlx::query_as::<_, Article>(
+        "INSERT INTO articles (source_id, link, title, summary, content, published_at) \
+         VALUES (?, ?, ?, ?, ?, ?) \
+         ON CONFLICT(link) DO NOTHING RETURNING *",
+    )
+    .bind(source_id)
+    .bind(link)
+    .bind(title)
+    .bind(summary)
+    .bind(content)
+    .bind(published_at)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn list_articles(
+    pool: &SqlitePool,
+    query: &ArticleQuery,
+) -> Result<Vec<Article>, sqlx::Error> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).min(100);
+    let offset = (page - 1) * per_page;
+
+    let (where_clause, _params) = build_article_filter(query);
+    let sql = format!(
+        "SELECT * FROM articles{} ORDER BY fetched_at DESC LIMIT ? OFFSET ?",
+        where_clause
+    );
+
+    // Use simple query since dynamic clauses are minimal for articles
+    if query.source_id.is_some() && query.processed.is_some() {
+        sqlx::query_as::<_, Article>(&sql)
+            .bind(query.source_id.unwrap())
+            .bind(query.processed.unwrap())
+            .bind(per_page as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+    } else if let Some(source_id) = query.source_id {
+        sqlx::query_as::<_, Article>(&sql)
+            .bind(source_id)
+            .bind(per_page as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+    } else if let Some(processed) = query.processed {
+        sqlx::query_as::<_, Article>(&sql)
+            .bind(processed)
+            .bind(per_page as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+    } else {
+        sqlx::query_as::<_, Article>(&sql)
+            .bind(per_page as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+    }
+}
+
+fn build_article_filter(query: &ArticleQuery) -> (String, Vec<(String, String)>) {
+    let mut conditions = vec![];
+    if query.source_id.is_some() {
+        conditions.push("source_id = ?".to_string());
+    }
+    if let Some(processed) = query.processed {
+        if processed {
+            conditions.push("processed_at IS NOT NULL".to_string());
+        } else {
+            conditions.push("processed_at IS NULL".to_string());
+        }
+    }
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+    (where_clause, vec![])
+}
+
+pub async fn get_article_by_id(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<Option<Article>, sqlx::Error> {
+    sqlx::query_as::<_, Article>("SELECT * FROM articles WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+}
+
+pub async fn get_unprocessed_articles(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<Article>, sqlx::Error> {
+    sqlx::query_as::<_, Article>(
+        "SELECT * FROM articles WHERE processed_at IS NULL ORDER BY fetched_at ASC LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn mark_processed(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE articles SET processed_at = datetime('now') WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn count_articles(
+    pool: &SqlitePool,
+    query: &ArticleQuery,
+) -> Result<i64, sqlx::Error> {
+    let (where_clause, _) = build_article_filter(query);
+    let sql = format!("SELECT COUNT(*) as count FROM articles{}", where_clause);
+    let row: (i64,) = sqlx::query_as(&sql).fetch_one(pool).await?;
+    Ok(row.0)
+}
