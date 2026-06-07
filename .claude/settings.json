@@ -7,7 +7,11 @@
       "Bash(cargo run *)",
       "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" -X DELETE \"http://localhost:8080/api/v1/tokens/5\")",
       "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"noauth\"}' \"http://localhost:8080/api/v1/tokens\")",
-      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" \"http://localhost:8080/api/v1/tokens/5\")"
+      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" \"http://localhost:8080/api/v1/tokens/5\")",
+      "Bash(Get-ChildItem -Path openspec/changes/implement-crud-apis/specs -Recurse -Name)",
+      "Bash(Get-ChildItem -Path openspec/specs -Directory -Name)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path openspec/changes/archive)",
+      "PowerShell(Move-Item -Path openspec/changes/implement-crud-apis -Destination openspec/changes/archive/2026-06-07-implement-crud-apis)"
     ]
   }
 }

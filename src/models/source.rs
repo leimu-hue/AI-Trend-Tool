@@ -6,6 +6,7 @@ use sqlx::FromRow;
 pub struct DataSource {
     pub id: i64,
     #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
     pub source_type: String,
     pub name: String,
     pub url: String,

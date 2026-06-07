@@ -8,7 +8,7 @@ use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
 use crate::config::AppConfig;
-use crate::handlers::token;
+use crate::handlers::{channel, keyword, source, token};
 use crate::middleware::auth::auth_middleware;
 
 pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
@@ -22,9 +22,22 @@ pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
         .route("/tokens", post(token::create_token))
         .route("/tokens", get(token::list_tokens))
         .route("/tokens/revoke/{id}", post(token::revoke_token))
-        // Sources API (step 04)
-        // Keywords API (step 04)
-        // Channels API (step 04)
+        // Sources API
+        .route("/sources", get(source::list_sources))
+        .route("/sources", post(source::create_source))
+        .route("/sources/{id}/update", post(source::update_source))
+        .route("/sources/{id}/delete", post(source::delete_source))
+        .route("/sources/{id}/fetch", post(source::trigger_fetch))
+        // Keywords API
+        .route("/keywords", get(keyword::list_keywords))
+        .route("/keywords", post(keyword::create_keyword))
+        .route("/keywords/{id}/update", post(keyword::update_keyword))
+        .route("/keywords/{id}/delete", post(keyword::delete_keyword))
+        // Channels API
+        .route("/channels", get(channel::list_channels))
+        .route("/channels", post(channel::create_channel))
+        .route("/channels/{id}/update", post(channel::update_channel))
+        .route("/channels/{id}/delete", post(channel::delete_channel))
         // Query API (step 05)
         // System control (step 05)
         .with_state(state.clone())

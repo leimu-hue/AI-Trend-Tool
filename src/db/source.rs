@@ -110,3 +110,16 @@ pub async fn update_source_last_fetched(
         .await?;
     Ok(())
 }
+
+/// Reset last_fetched_at to NULL so the Parser picks up this source
+/// on its next polling cycle (used by manual fetch trigger).
+pub async fn reset_last_fetched(
+    pool: &SqlitePool,
+    id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE data_sources SET last_fetched_at = NULL WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
