@@ -1,0 +1,43 @@
+[package]
+name = "trend-monitor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tokio = { version = "1", features = ["full"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "migrate"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# RSS parsing (used in step 05, declared early)
+feed-rs = "1"
+
+# String matching (used in step 05, declared early)
+aho-corasick = "1"
+
+# HTTP client (webhook push, used in step 05)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Random token generation
+rand = "0.8"
+hex = "0.4"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }

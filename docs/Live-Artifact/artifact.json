@@ -1,0 +1,24 @@
+{
+  "title": "AI 热点监控看板",
+  "slug": "ai-hotspot-monitor",
+  "pinned": true,
+  "status": "active",
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json",
+    "dataJson": {
+      "summary": {
+        "title": "AI 热点监控",
+        "subtitle": "多源实时监控 · 关键词告警 · 趋势分析",
+        "lastSync": "2026-06-06 14:32:08 UTC",
+        "version": "v1.2.0"
+      }
+    }
+  }
+}

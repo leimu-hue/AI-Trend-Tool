@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{data.summary.title}} · AI 热点监控</title>
+<style>
+/* ── Warp Design System Tokens ──────────────────────────────── */
+:root {
+  --bg: #161412;
+  --surface: #1f1d1b;
+  --surface-warm: var(--surface);
+  --fg: #faf9f6;
+  --fg-2: #afaeac;
+  --muted: #868584;
+  --meta: #666469;
+  --border: rgba(226, 226, 226, 0.35);
+  --border-soft: var(--border);
+  --accent: #353534;
+  --accent-on: #afaeac;
+  --accent-hover: #454545;
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-display: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Matter Mono Regular", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --text-xs: 12px; --text-sm: 14px; --text-base: 18px;
+  --text-lg: 24px; --text-xl: 32px; --text-2xl: 48px;
+  --radius-sm: 6px; --radius-md: 12px; --radius-lg: 14px; --radius-pill: 9999px;
+  --elev-flat: none; --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 5px 15px rgba(0, 0, 0, 0.2);
+  --focus-ring: 0 0 0 2px rgba(250, 249, 246, 0.5);
+  --motion-fast: 150ms; --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1500px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  --sidebar-w: 220px;
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg-2);
+  font-family: var(--font-body);
+  font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: flex; overflow: hidden;
+}
+a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--meta); text-underline-offset: 4px; }
+a:hover { text-decoration-color: var(--fg); }
+code, .mono { font-family: var(--font-mono); }
+
+/* ── Sidebar ────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  height: 100vh; background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 40;
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+.sidebar-brand { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-brand .logo-row { display: flex; align-items: center; gap: 10px; }
+.sidebar-brand .logo-icon {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: linear-gradient(135deg, #353534, #454545);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 13px; color: var(--fg);
+}
+.sidebar-brand .brand-name {
+  font-family: var(--font-display); font-weight: 400;
+  font-size: 15px; color: var(--fg); letter-spacing: -0.01em;
+}
+.sidebar-brand .brand-sub {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px;
+}
+.sidebar-nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  font-size: 13.5px; color: var(--muted);
+  cursor: pointer; border: none; background: none; width: 100%;
+  text-align: left; font-family: var(--font-body);
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--fg-2); }
+.nav-item.active { background: var(--accent); color: var(--fg); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.6; }
+.nav-item.active svg { opacity: 1; }
+.nav-section {
+  font-size: 10px; color: var(--meta); text-transform: uppercase;
+  letter-spacing: 0.16em; padding: 16px 12px 6px; font-family: var(--font-mono);
+}
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.sidebar-footer .live-dot {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--success);
+}
+.live-dot::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--success); box-shadow: 0 0 8px var(--success);
+}
+.sidebar-footer .sync-text { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* ── Main content ───────────────────────────────────────────── */
+.main-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-bottom: 1px solid var(--border);
+  background: rgba(22,20,18,0.8); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 30;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-family: var(--font-display); font-size: 16px; color: var(--fg); letter-spacing: -0.01em; }
+.topbar-badge {
+  font-family: var(--font-mono); font-size: 10px; color: var(--success);
+  border: 1px solid rgba(22,163,74,0.3); border-radius: var(--radius-pill);
+  padding: 2px 8px; background: rgba(22,163,74,0.08);
+}
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar .menu-btn { display: none; background: none; border: none; color: var(--fg); cursor: pointer; padding: 4px; border-radius: var(--radius-sm); }
+.topbar .menu-btn:hover { background: rgba(255,255,255,0.06); }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* ── Stats row ───────────────────────────────────────────────── */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.stat-card .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+.stat-card .stat-value { font-family: var(--font-display); font-size: 32px; font-weight: 400; color: var(--fg); line-height: 1; letter-spacing: -0.02em; }
+.stat-card .stat-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.stat-card .stat-sub.up { color: var(--success); }
+.stat-card .stat-sub.warn { color: var(--warn); }
+
+/* ── Panel / Card ───────────────────────────────────────────── */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 18px; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.panel-title { font-family: var(--font-display); font-size: 15px; color: var(--fg); font-weight: 400; letter-spacing: -0.005em; }
+.panel-actions { display: flex; gap: 8px; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-family: var(--font-body); font-size: 13px; font-weight: 400;
+  cursor: pointer; border: none; line-height: 1.3;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  text-decoration: none;
+}
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary { background: var(--accent); color: var(--accent-on); }
+.btn-primary:hover { background: var(--accent-hover); color: var(--fg); }
+.btn-ghost { background: transparent; color: var(--fg-2); }
+.btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
+.btn-sm { padding: 5px 10px; font-size: 11.5px; border-radius: var(--radius-sm); }
+.btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(220,38,38,0.3); }
+.btn-danger:hover { background: rgba(220,38,38,0.1); }
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em; font-weight: 400;
+  background: rgba(255,255,255,0.015);
+}
+td { color: var(--fg-2); }
+tr:hover td { background: rgba(255,255,255,0.015); }
+td:first-child, th:first-child { padding-left: 18px; }
+td:last-child, th:last-child { padding-right: 18px; }
+
+/* ── Badges ──────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; white-space: nowrap;
+}
+.badge-success { color: var(--success); border: 1px solid rgba(22,163,74,0.3); background: rgba(22,163,74,0.06); }
+.badge-warn { color: var(--warn); border: 1px solid rgba(234,179,8,0.3); background: rgba(234,179,8,0.06); }
+.badge-danger { color: var(--danger); border: 1px solid rgba(220,38,38,0.3); background: rgba(220,38,38,0.06); }
+.badge-neutral { color: var(--muted); border: 1px solid var(--border); }
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.badge-dot.success-dot { background: var(--success); }
+.badge-dot.warn-dot { background: var(--warn); }
+.badge-dot.danger-dot { background: var(--danger); }
+.dot-show { display: inline-block; }
+.dot-hide { display: none; }
+
+/* ── Severity ────────────────────────────────────────────────── */
+.severity { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 400; }
+.severity::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+.severity.critical { color: var(--danger); }
+.severity.critical::before { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.severity.high { color: var(--warn); }
+.severity.high::before { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.severity.medium { color: var(--success); }
+.severity.medium::before { background: var(--success); }
+
+/* ── Trend chart ─────────────────────────────────────────────── */
+.trend-chart { padding: 16px 18px; }
+.trend-chart svg { width: 100%; height: 200px; display: block; }
+.trend-labels { display: flex; justify-content: space-between; padding: 4px 2px 0; font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+
+/* ── Grid layouts ────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid-2-wide { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+
+/* ── Modal ───────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px;
+  min-width: 420px; max-width: 520px; width: 90%;
+  box-shadow: var(--elev-raised);
+}
+.modal h3 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; color: var(--fg); margin: 0 0 20px; letter-spacing: -0.01em; }
+.modal .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.modal .field label { font-size: 12px; color: var(--fg-2); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.modal .field input, .modal .field select {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--fg); font-family: var(--font-body); font-size: 14px;
+  outline: none; transition: border-color var(--motion-fast);
+}
+.modal .field input:focus, .modal .field select:focus { border-color: var(--fg); box-shadow: var(--focus-ring); }
+.modal .field input::placeholder { color: var(--meta); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.modal .field-help { font-size: 11px; color: var(--meta); }
+
+/* ── Settings ────────────────────────────────────────────────── */
+.settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.settings-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; }
+.settings-group h4 { font-family: var(--font-display); font-size: 15px; color: var(--fg); font-weight: 400; margin: 0 0 14px; letter-spacing: -0.005em; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.setting-row:last-child { border-bottom: 0; }
+.setting-label { font-size: 13px; color: var(--fg-2); }
+.setting-value { font-family: var(--font-mono); font-size: 12px; color: var(--fg); background: var(--bg); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* ── Misc ───────────────────────────────────────────────────── */
+.truncate { display: inline-block; vertical-align: middle; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 200;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 18px;
+  font-size: 13px; color: var(--fg); box-shadow: var(--elev-raised);
+  display: none; align-items: center; gap: 8px;
+}
+.toast.show { display: flex; animation: toastIn 0.3s var(--ease-standard); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.source-fetch-btn { cursor: pointer; }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .grid-2-wide { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); z-index: 50; }
+  .sidebar.open { transform: translateX(0); }
+  .topbar .menu-btn { display: block; }
+  .stats-row { grid-template-columns: 1fr; }
+  .modal { min-width: unset; padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Sidebar ─────────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-row">
+      <div class="logo-icon">◈</div>
+      <div>
+        <div class="brand-name">{{data.summary.title}}</div>
+        <div class="brand-sub">{{data.summary.subtitle}}</div>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">监控</div>
+    <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      仪表盘
+    </button>
+    <button class="nav-item" data-view="articles" onclick="switchView('articles')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      文章日志
+    </button>
+    <div class="nav-section">配置</div>
+    <button class="nav-item" data-view="sources" onclick="switchView('sources')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      数据源
+    </button>
+    <button class="nav-item" data-view="keywords" onclick="switchView('keywords')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      关键词
+    </button>
+    <button class="nav-item" data-view="channels" onclick="switchView('channels')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      推送渠道
+    </button>
+    <button class="nav-item" data-view="tokens" onclick="switchView('tokens')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      API 令牌
+    </button>
+    <div class="nav-section">系统</div>
+    <button class="nav-item" data-view="settings" onclick="switchView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      设置
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="live-dot">{{data.footer.live}}</div>
+    <div class="sync-text">{{data.footer.refreshLabel}}</div>
+  </div>
+</aside>
+
+<!-- ─── Main content ──────────────────────────────────────────────── -->
+<div class="main-wrap">
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="menu-btn" onclick="toggleSidebar()" aria-label="菜单">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="topbar-title" id="viewTitle">仪表盘</span>
+      <span class="topbar-badge">BETA</span>
+    </div>
+    <div class="topbar-right">
+      <span class="mono" style="font-size:11px;color:var(--muted);">{{data.summary.lastSync}}</span>
+    </div>
+  </header>
+
+  <main class="main-content" id="mainContent">
+
+    <!-- ══════ DASHBOARD ══════ -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-row" data-od-repeat="stat in data.stats">
+        <div class="stat-card">
+          <div class="stat-label">{{stat.label}}</div>
+          <div class="stat-value">{{stat.value}}</div>
+          <div class="stat-sub {{stat.trendClass}}">{{stat.sub}}</div>
+        </div>
+      </div>
+
+      <div class="grid-2-wide">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">关键词趋势（24h）</span>
+            <span class="badge badge-success"><span class="badge-dot success-dot"></span>GPT-5 · 当前热点</span>
+          </div>
+          <div class="trend-chart">
+            <svg viewBox="0 0 880 200" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trendGrad" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#16a34a" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#16a34a" stop-opacity="0"/>
+                </linearGradient>
+                <pattern id="trendGrid" x="0" y="0" width="110" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 110 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="880" height="200" fill="url(#trendGrid)"/>
+              <polygon fill="url(#trendGrad)" points="{{data.trendArea}}"/>
+              <polyline fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="{{data.trendPoints}}"/>
+            </svg>
+            <div class="trend-labels" data-od-repeat="lbl in data.trendLabels">
+              <span>{{lbl}}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">活跃热点</span>
+            <button class="btn btn-primary btn-sm" onclick="showToast('手动触发过滤器...')">手动扫描</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>关键词</th>
+                <th>热度</th>
+                <th>偏离</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="hs in data.hotspots">
+              <tr>
+                <td style="color:var(--fg);font-weight:400;">{{hs.keyword}}</td>
+                <td><span class="mono" style="font-size:12px;">{{hs.count}}</span></td>
+                <td><span class="severity {{hs.severityClass}}">{{hs.deviation}}</span></td>
+                <td><span class="badge {{hs.badgeClass}}"><span class="badge-dot {{hs.dotClass}}"></span>{{hs.statusLabel}}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">最新文章</span>
+          <button class="btn btn-ghost btn-sm" onclick="switchView('articles')">查看全部 →</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>来源</th>
+              <th>标题</th>
+              <th>匹配关键词</th>
+              <th>时间</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody data-od-repeat="a in data.dashboardArticles">
+            <tr>
+              <td><span class="mono" style="font-size:11px;">{{a.source}}</span></td>
+              <td><a href="{{a.link}}" class="truncate" style="max-width:320px;">{{a.title}}</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">{{a.matchedKeywords}}</span></td>
+              <td><span class="mono" style="font-size:11px;">{{a.publishedAt}}</span></td>
+              <td><span class="badge {{a.badgeClass}}"><span class="badge-dot {{a.dotClass}}"></span>{{a.statusLabel}}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════ DATA SOURCES ══════ -->
+    <div class="view" id="view-sources">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">数据源管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('source-modal')">+ 添加数据源</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>类型</th>
+                <th>URL</th>
+                <th>间隔(秒)</th>
+                <th>文章数</th>
+                <th>上次抓取</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="src in data.sources">
+              <tr data-source-name="{{src.name}}">
+                <td style="color:var(--fg);">{{src.name}}</td>
+                <td><span class="badge badge-neutral">{{src.type}}</span></td>
+                <td><span class="mono truncate" style="font-size:11px;max-width:200px;">{{src.url}}</span></td>
+                <td><span class="mono">{{src.interval}}</span></td>
+                <td><span class="mono">{{src.articleCount}}</span></td>
+                <td><span class="mono" style="font-size:11px;">{{src.lastFetched}}</span></td>
+                <td><span class="badge {{src.badgeClass}}"><span class="badge-dot {{src.dotClass}}"></span>{{src.statusLabel}}</span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm source-fetch-btn">{{src.fetchLabel}}</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ KEYWORDS ══════ -->
+    <div class="view" id="view-keywords">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">关键词管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('keyword-modal')">+ 添加关键词</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>关键词</th>
+                <th>大小写</th>
+                <th>标准差倍数</th>
+                <th>最小计数</th>
+                <th>24h 命中</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="kw in data.keywords">
+              <tr data-keyword="{{kw.word}}">
+                <td style="color:var(--fg);font-family:var(--font-mono);">{{kw.word}}</td>
+                <td><span class="mono" style="font-size:11px;">{{kw.caseLabel}}</span></td>
+                <td><span class="mono">{{kw.stdMultiplier}}</span></td>
+                <td><span class="mono">{{kw.minHotCount}}</span></td>
+                <td><span class="mono" style="color:var(--success);">{{kw.matchCount}}</span></td>
+                <td><span class="badge {{kw.badgeClass}}"><span class="badge-dot {{kw.dotClass}}"></span>{{kw.statusLabel}}</span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm kw-toggle-btn">{{kw.toggleLabel}}</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PUSH CHANNELS ══════ -->
+    <div class="view" id="view-channels">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">推送渠道管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('channel-modal')">+ 添加渠道</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>类型</th>
+                <th>Webhook URL</th>
+                <th>推送次数</th>
+                <th>上次推送</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="ch in data.channels">
+              <tr data-channel-name="{{ch.name}}">
+                <td style="color:var(--fg);">{{ch.name}}</td>
+                <td><span class="badge badge-neutral">{{ch.type}}</span></td>
+                <td><span class="mono truncate" style="font-size:11px;max-width:240px;">{{ch.url}}</span></td>
+                <td><span class="mono">{{ch.pushCount}}</span></td>
+                <td><span class="mono" style="font-size:11px;">{{ch.lastPush}}</span></td>
+                <td><span class="badge {{ch.badgeClass}}"><span class="badge-dot {{ch.dotClass}}"></span>{{ch.statusLabel}}</span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm ch-test-btn">测试</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('channel-modal')">编辑</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ ARTICLES ══════ -->
+    <div class="view" id="view-articles">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">文章日志</span>
+          <div class="panel-actions">
+            <button class="btn btn-ghost btn-sm" onclick="showToast('过滤器已触发，正在处理...')">运行过滤器</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>来源</th>
+                <th>标题</th>
+                <th>匹配关键词</th>
+                <th>发布时间</th>
+                <th>处理状态</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="art in data.articles">
+              <tr>
+                <td><span class="mono" style="font-size:11px;color:var(--meta);">{{art.id}}</span></td>
+                <td><span class="mono" style="font-size:11px;">{{art.source}}</span></td>
+                <td><a href="{{art.link}}" class="truncate" style="max-width:340px;">{{art.title}}</a></td>
+                <td><span class="mono" style="font-size:11px;color:var(--success);">{{art.matchedKeywords}}</span></td>
+                <td><span class="mono" style="font-size:11px;">{{art.publishedAt}}</span></td>
+                <td><span class="badge {{art.badgeClass}}"><span class="badge-dot {{art.dotClass}}"></span>{{art.statusLabel}}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ API TOKENS ══════ -->
+    <div class="view" id="view-tokens">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">API 令牌管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('token-modal')">+ 生成令牌</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>最后使用</th>
+                <th>过期时间</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody data-od-repeat="tok in data.tokens">
+              <tr data-token-name="{{tok.name}}" data-token-revoked="{{tok.revoked}}">
+                <td style="color:var(--fg);">{{tok.name}}</td>
+                <td><span class="mono" style="font-size:11px;">{{tok.lastUsed}}</span></td>
+                <td><span class="mono" style="font-size:11px;">{{tok.expiresAt}}</span></td>
+                <td><span class="badge {{tok.badgeClass}}"><span class="badge-dot {{tok.dotClass}}"></span>{{tok.statusLabel}}</span></td>
+                <td class="token-actions">
+                  <span class="token-active-only">
+                    <button class="btn btn-ghost btn-sm copy-token-btn">复制</button>
+                    <button class="btn btn-danger btn-sm revoke-token-btn">吊销</button>
+                  </span>
+                  <span class="token-revoked-only" style="display:none;">
+                    <span class="mono" style="font-size:11px;color:var(--meta);">—</span>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ SETTINGS ══════ -->
+    <div class="view" id="view-settings">
+      <div class="settings-grid">
+        <div class="settings-group">
+          <h4>解析器配置</h4>
+          <div class="setting-row">
+            <span class="setting-label">最大并发抓取数</span>
+            <span class="setting-value">{{data.settings.maxConcurrentFetches}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">默认超时时间（秒）</span>
+            <span class="setting-value">{{data.settings.defaultTimeout}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">默认抓取间隔（秒）</span>
+            <span class="setting-value">{{data.settings.defaultInterval}}</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>过滤器配置</h4>
+          <div class="setting-row">
+            <span class="setting-label">批处理大小</span>
+            <span class="setting-value">{{data.settings.batchSize}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">运行间隔（秒）</span>
+            <span class="setting-value">{{data.settings.filterIntervalSec}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">历史窗口（小时）</span>
+            <span class="setting-value">{{data.settings.historyHours}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">最小历史数据（小时）</span>
+            <span class="setting-value">{{data.settings.minHistoryHours}}</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>推送器配置</h4>
+          <div class="setting-row">
+            <span class="setting-label">轮询间隔（秒）</span>
+            <span class="setting-value">{{data.settings.pusherIntervalSec}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">最大重试次数</span>
+            <span class="setting-value">{{data.settings.maxRetries}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">重试基础间隔（秒）</span>
+            <span class="setting-value">{{data.settings.retryBaseSec}}</span>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>服务器配置</h4>
+          <div class="setting-row">
+            <span class="setting-label">监听地址</span>
+            <span class="setting-value">{{data.settings.host}}</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">端口</span>
+            <span class="setting-value">{{data.settings.port}}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ─── Modals ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="source-modal">
+  <div class="modal">
+    <h3>添加数据源</h3>
+    <div class="field"><label>名称</label><input type="text" placeholder="例如：Hacker News AI" /></div>
+    <div class="field"><label>类型</label><select><option>RSS</option><option>API</option><option>Atom</option></select></div>
+    <div class="field"><label>URL</label><input type="text" placeholder="https://..." /></div>
+    <div class="field"><label>拉取间隔（秒）</label><input type="number" value="300" /><span class="field-help">默认 300 秒（5 分钟）</span></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('source-modal')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('source-modal');showToast('数据源已添加')">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="keyword-modal">
+  <div class="modal">
+    <h3>添加关键词</h3>
+    <div class="field"><label>关键词</label><input type="text" placeholder="例如：GPT-5" /></div>
+    <div class="field"><label>大小写敏感</label><select><option>否</option><option>是</option></select></div>
+    <div class="field"><label>标准差倍数</label><input type="number" value="2.0" step="0.1" /><span class="field-help">默认 2.0，值越低越敏感</span></div>
+    <div class="field"><label>最小触发计数</label><input type="number" value="3" /></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('keyword-modal')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('keyword-modal');showToast('关键词已添加')">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="channel-modal">
+  <div class="modal">
+    <h3>添加推送渠道</h3>
+    <div class="field"><label>名称</label><input type="text" placeholder="例如：钉钉告警群" /></div>
+    <div class="field"><label>类型</label><select><option>webhook</option></select></div>
+    <div class="field"><label>Webhook URL</label><input type="text" placeholder="https://..." /></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('channel-modal')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('channel-modal');showToast('推送渠道已添加')">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="token-modal">
+  <div class="modal">
+    <h3>生成 API 令牌</h3>
+    <div class="field"><label>令牌名称 / 用途</label><input type="text" placeholder="例如：前端 UI、CLI 工具" /></div>
+    <div class="field"><label>过期时间（留空为永久）</label><input type="date" /><span class="field-help">留空则永不过期</span></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('token-modal')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('token-modal');showToast('令牌已生成，请妥善保存')">确认生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Toast ──────────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<!-- ─── Script ─────────────────────────────────────────────────────── -->
+<script>
+(function() {
+  var viewTitles = {
+    dashboard: '仪表盘',
+    sources: '数据源管理',
+    keywords: '关键词管理',
+    channels: '推送渠道管理',
+    articles: '文章日志',
+    tokens: 'API 令牌管理',
+    settings: '系统设置'
+  };
+
+  window.switchView = function(name) {
+    document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+    var target = document.getElementById('view-' + name);
+    if (target) target.classList.add('active');
+
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    var nav = document.querySelector('.nav-item[data-view="' + name + '"]');
+    if (nav) nav.classList.add('active');
+
+    document.getElementById('viewTitle').textContent = viewTitles[name] || name;
+    document.getElementById('sidebar').classList.remove('open');
+    try { localStorage.setItem('hotspot-monitor-view', name); } catch(e) {}
+  };
+
+  window.toggleSidebar = function() {
+    document.getElementById('sidebar').classList.toggle('open');
+  };
+
+  window.openModal = function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.classList.add('open'); var inp = el.querySelector('input'); if (inp) setTimeout(function() { inp.focus(); }, 100); }
+  };
+
+  window.closeModal = function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  };
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+    }
+  });
+
+  var toastTimer;
+  window.showToast = function(msg) {
+    var toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 2000);
+  };
+
+  // ── Event delegation for dynamic table actions ──
+  document.getElementById('mainContent').addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+
+    // Source fetch buttons
+    if (btn.classList.contains('source-fetch-btn')) {
+      var row = btn.closest('tr');
+      var name = row ? row.getAttribute('data-source-name') : '';
+      showToast('手动抓取已触发: ' + (name || '未知数据源'));
+    }
+
+    // Keyword toggle buttons
+    if (btn.classList.contains('kw-toggle-btn')) {
+      var row = btn.closest('tr');
+      var kw = row ? row.getAttribute('data-keyword') : '';
+      var newState = btn.textContent.trim() === '暂停' ? '已暂停' : '已启用';
+      showToast(kw + ': ' + newState);
+    }
+
+    // Channel test buttons
+    if (btn.classList.contains('ch-test-btn')) {
+      var row = btn.closest('tr');
+      var name = row ? row.getAttribute('data-channel-name') : '';
+      showToast('测试推送已发送: ' + (name || '未知渠道'));
+    }
+
+    // Copy token buttons
+    if (btn.classList.contains('copy-token-btn')) {
+      var row = btn.closest('tr');
+      var name = row ? row.getAttribute('data-token-name') : '';
+      showToast('令牌已复制到剪贴板: ' + (name || ''));
+    }
+
+    // Revoke token buttons
+    if (btn.classList.contains('revoke-token-btn')) {
+      var row = btn.closest('tr');
+      var name = row ? row.getAttribute('data-token-name') : '';
+      if (confirm('确定要吊销令牌 "' + name + '" 吗？此操作不可撤销。')) {
+        showToast('已吊销: ' + (name || ''));
+      }
+    }
+  });
+
+  // ── Apply revoked/hidden states from data attributes ──
+  // After daemon renders the template, tokens with revoked=1 hide the active buttons
+  function applyTokenStates() {
+    document.querySelectorAll('[data-token-revoked]').forEach(function(row) {
+      var revoked = row.getAttribute('data-token-revoked') === '1';
+      var activeEls = row.querySelectorAll('.token-active-only');
+      var revokedEls = row.querySelectorAll('.token-revoked-only');
+      if (revoked) {
+        activeEls.forEach(function(el) { el.style.display = 'none'; });
+        revokedEls.forEach(function(el) { el.style.display = ''; });
+      }
+    });
+  }
+
+  // ── Restore saved view ──
+  var saved = (function() {
+    try { return localStorage.getItem('hotspot-monitor-view'); } catch(e) { return null; }
+  })();
+  if (saved && viewTitles[saved]) switchView(saved);
+
+  // Run state fixes after a short delay to let DOM settle
+  setTimeout(applyTokenStates, 50);
+
+})();
+</script>
+
+</body>
+</html>

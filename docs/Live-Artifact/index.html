@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 热点监控 · 仪表盘</title>
+<style>
+:root {
+  --bg: #161412;
+  --surface: #1f1d1b;
+  --surface-warm: var(--surface);
+  --fg: #faf9f6;
+  --fg-2: #afaeac;
+  --muted: #868584;
+  --meta: #666469;
+  --border: rgba(226, 226, 226, 0.35);
+  --border-soft: var(--border);
+  --accent: #353534;
+  --accent-on: #afaeac;
+  --accent-hover: #454545;
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-display: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Matter Mono Regular", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --text-xs: 12px; --text-sm: 14px; --text-base: 18px;
+  --text-lg: 24px; --text-xl: 32px; --text-2xl: 48px;
+  --radius-sm: 6px; --radius-md: 12px; --radius-lg: 14px; --radius-pill: 9999px;
+  --elev-flat: none; --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 5px 15px rgba(0, 0, 0, 0.2);
+  --focus-ring: 0 0 0 2px rgba(250, 249, 246, 0.5);
+  --motion-fast: 150ms; --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1500px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  --sidebar-w: 220px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--fg-2);
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; display: flex; overflow: hidden;
+}
+a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--meta); text-underline-offset: 4px; }
+a:hover { text-decoration-color: var(--fg); }
+code, .mono { font-family: var(--font-mono); }
+
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  height: 100vh; background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 40;
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+.sidebar-brand { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-brand .logo-row { display: flex; align-items: center; gap: 10px; }
+.sidebar-brand .logo-icon {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: linear-gradient(135deg, #353534, #454545);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 13px; color: var(--fg);
+}
+.sidebar-brand .brand-name {
+  font-family: var(--font-display); font-weight: 400;
+  font-size: 15px; color: var(--fg); letter-spacing: -0.01em;
+}
+.sidebar-brand .brand-sub {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px;
+}
+.sidebar-nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  font-size: 13.5px; color: var(--muted);
+  cursor: pointer; border: none; background: none; width: 100%;
+  text-align: left; font-family: var(--font-body);
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--fg-2); }
+.nav-item.active { background: var(--accent); color: var(--fg); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.6; }
+.nav-item.active svg { opacity: 1; }
+.nav-section {
+  font-size: 10px; color: var(--meta); text-transform: uppercase;
+  letter-spacing: 0.16em; padding: 16px 12px 6px; font-family: var(--font-mono);
+}
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.sidebar-footer .live-dot {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--success);
+}
+.live-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+.sidebar-footer .sync-text { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.main-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-bottom: 1px solid var(--border);
+  background: rgba(22,20,18,0.8); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 30;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-family: var(--font-display); font-size: 16px; color: var(--fg); letter-spacing: -0.01em; }
+.topbar-badge {
+  font-family: var(--font-mono); font-size: 10px; color: var(--success);
+  border: 1px solid rgba(22,163,74,0.3); border-radius: var(--radius-pill);
+  padding: 2px 8px; background: rgba(22,163,74,0.08);
+}
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar .menu-btn { display: none; background: none; border: none; color: var(--fg); cursor: pointer; padding: 4px; border-radius: var(--radius-sm); }
+.topbar .menu-btn:hover { background: rgba(255,255,255,0.06); }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; }
+.view { display: none; }
+.view.active { display: block; }
+
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.stat-card .stat-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+.stat-card .stat-value { font-family: var(--font-display); font-size: 32px; font-weight: 400; color: var(--fg); line-height: 1; letter-spacing: -0.02em; }
+.stat-card .stat-sub { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.stat-card .stat-sub.up { color: var(--success); }
+.stat-card .stat-sub.warn { color: var(--warn); }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 18px; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.panel-title { font-family: var(--font-display); font-size: 15px; color: var(--fg); font-weight: 400; letter-spacing: -0.005em; }
+.panel-actions { display: flex; gap: 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-family: var(--font-body); font-size: 13px; font-weight: 400;
+  cursor: pointer; border: none; line-height: 1.3;
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  text-decoration: none;
+}
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary { background: var(--accent); color: var(--accent-on); }
+.btn-primary:hover { background: var(--accent-hover); color: var(--fg); }
+.btn-ghost { background: transparent; color: var(--fg-2); }
+.btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
+.btn-sm { padding: 5px 10px; font-size: 11.5px; border-radius: var(--radius-sm); }
+.btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(220,38,38,0.3); }
+.btn-danger:hover { background: rgba(220,38,38,0.1); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em; font-weight: 400;
+  background: rgba(255,255,255,0.015);
+}
+td { color: var(--fg-2); }
+tr:hover td { background: rgba(255,255,255,0.015); }
+td:first-child, th:first-child { padding-left: 18px; }
+td:last-child, th:last-child { padding-right: 18px; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; white-space: nowrap;
+}
+.badge-success { color: var(--success); border: 1px solid rgba(22,163,74,0.3); background: rgba(22,163,74,0.06); }
+.badge-warn { color: var(--warn); border: 1px solid rgba(234,179,8,0.3); background: rgba(234,179,8,0.06); }
+.badge-danger { color: var(--danger); border: 1px solid rgba(220,38,38,0.3); background: rgba(220,38,38,0.06); }
+.badge-neutral { color: var(--muted); border: 1px solid var(--border); }
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.badge-dot.success-dot { background: var(--success); }
+.badge-dot.warn-dot { background: var(--warn); }
+.badge-dot.danger-dot { background: var(--danger); }
+.dot-show { display: inline-block; }
+.dot-hide { display: none; }
+
+.severity { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 400; }
+.severity::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+.severity.critical { color: var(--danger); }
+.severity.critical::before { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.severity.high { color: var(--warn); }
+.severity.high::before { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.severity.medium { color: var(--success); }
+.severity.medium::before { background: var(--success); }
+
+.trend-chart { padding: 16px 18px; }
+.trend-chart svg { width: 100%; height: 200px; display: block; }
+.trend-labels { display: flex; justify-content: space-between; padding: 4px 2px 0; font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid-2-wide { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px;
+  min-width: 420px; max-width: 520px; width: 90%;
+  box-shadow: var(--elev-raised);
+}
+.modal h3 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 400; color: var(--fg); margin: 0 0 20px; letter-spacing: -0.01em; }
+.modal .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.modal .field label { font-size: 12px; color: var(--fg-2); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.modal .field input, .modal .field select {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--fg); font-family: var(--font-body); font-size: 14px;
+  outline: none; transition: border-color var(--motion-fast);
+}
+.modal .field input:focus, .modal .field select:focus { border-color: var(--fg); box-shadow: var(--focus-ring); }
+.modal .field input::placeholder { color: var(--meta); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.modal .field-help { font-size: 11px; color: var(--meta); }
+
+.settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.settings-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; }
+.settings-group h4 { font-family: var(--font-display); font-size: 15px; color: var(--fg); font-weight: 400; margin: 0 0 14px; letter-spacing: -0.005em; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.setting-row:last-child { border-bottom: 0; }
+.setting-label { font-size: 13px; color: var(--fg-2); }
+.setting-value { font-family: var(--font-mono); font-size: 12px; color: var(--fg); background: var(--bg); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+.truncate { display: inline-block; vertical-align: middle; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 200;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 18px;
+  font-size: 13px; color: var(--fg); box-shadow: var(--elev-raised);
+  display: none; align-items: center; gap: 8px;
+}
+.toast.show { display: flex; animation: toastIn 0.3s var(--ease-standard); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.source-fetch-btn { cursor: pointer; }
+
+@media (max-width: 1024px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .grid-2, .grid-2-wide { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); z-index: 50; }
+  .sidebar.open { transform: translateX(0); }
+  .topbar .menu-btn { display: block; }
+  .stats-row { grid-template-columns: 1fr; }
+  .modal { min-width: unset; padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-row">
+      <div class="logo-icon">◈</div>
+      <div>
+        <div class="brand-name">AI 热点监控</div>
+        <div class="brand-sub">多源实时监控 · 关键词告警 · 趋势分析</div>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">监控</div>
+    <button class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      仪表盘
+    </button>
+    <button class="nav-item" data-view="articles" onclick="switchView('articles')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      文章日志
+    </button>
+    <div class="nav-section">配置</div>
+    <button class="nav-item" data-view="sources" onclick="switchView('sources')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      数据源
+    </button>
+    <button class="nav-item" data-view="keywords" onclick="switchView('keywords')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      关键词
+    </button>
+    <button class="nav-item" data-view="channels" onclick="switchView('channels')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      推送渠道
+    </button>
+    <button class="nav-item" data-view="tokens" onclick="switchView('tokens')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      API 令牌
+    </button>
+    <div class="nav-section">系统</div>
+    <button class="nav-item" data-view="settings" onclick="switchView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      设置
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="live-dot">LIVE</div>
+    <div class="sync-text">监控中 · 每5分钟自动刷新</div>
+  </div>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="menu-btn" onclick="toggleSidebar()" aria-label="菜单">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="topbar-title" id="viewTitle">仪表盘</span>
+      <span class="topbar-badge">BETA</span>
+    </div>
+    <div class="topbar-right">
+      <span class="mono" style="font-size:11px;color:var(--muted);">2026-06-06 14:32:08 UTC</span>
+    </div>
+  </header>
+
+  <main class="main-content" id="mainContent">
+
+    <!-- ══════ DASHBOARD ══════ -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">数据源</div>
+          <div class="stat-value">8</div>
+          <div class="stat-sub ">5 RSS + 3 API</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">关键词</div>
+          <div class="stat-value">12</div>
+          <div class="stat-sub ">10 启用 · 2 暂停</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">今日文章</div>
+          <div class="stat-value">247</div>
+          <div class="stat-sub up">较昨日 +18%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">活跃热点</div>
+          <div class="stat-value">3</div>
+          <div class="stat-sub warn">2 已推送 · 1 待处理</div>
+        </div>
+      </div>
+
+      <div class="grid-2-wide">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">关键词趋势（24h）</span>
+            <span class="badge badge-success"><span class="badge-dot success-dot"></span>GPT-5 · 当前热点</span>
+          </div>
+          <div class="trend-chart">
+            <svg viewBox="0 0 880 200" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trendGrad" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#16a34a" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#16a34a" stop-opacity="0"/>
+                </linearGradient>
+                <pattern id="trendGrid" x="0" y="0" width="110" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 110 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="880" height="200" fill="url(#trendGrid)"/>
+              <polygon fill="url(#trendGrad)" points="0,200 0,140 55,128 110,135 165,118 220,124 275,108 330,98 385,112 440,95 495,105 550,82 605,90 660,68 715,75 770,55 825,62 880,42 880,200"/>
+              <polyline fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="0,140 55,128 110,135 165,118 220,124 275,108 330,98 385,112 440,95 495,105 550,82 605,90 660,68 715,75 770,55 825,62 880,42"/>
+            </svg>
+            <div class="trend-labels">
+              <span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span><span>19:00</span><span>20:00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">活跃热点</span>
+            <button class="btn btn-primary btn-sm" onclick="showToast('手动触发过滤器...')">手动扫描</button>
+          </div>
+          <table>
+            <thead><tr><th>关键词</th><th>热度</th><th>偏离</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr>
+                <td style="color:var(--fg);font-weight:400;">GPT-5</td>
+                <td><span class="mono" style="font-size:12px;">47 次/小时</span></td>
+                <td><span class="severity critical">12.5σ</span></td>
+                <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已推送</span></td>
+              </tr>
+              <tr>
+                <td style="color:var(--fg);font-weight:400;">多模态</td>
+                <td><span class="mono" style="font-size:12px;">31 次/小时</span></td>
+                <td><span class="severity high">8.8σ</span></td>
+                <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已推送</span></td>
+              </tr>
+              <tr>
+                <td style="color:var(--fg);font-weight:400;">开源模型</td>
+                <td><span class="mono" style="font-size:12px;">28 次/小时</span></td>
+                <td><span class="severity medium">6.1σ</span></td>
+                <td><span class="badge badge-warn"><span class="badge-dot warn-dot dot-show"></span>待推送</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">最新文章</span>
+          <button class="btn btn-ghost btn-sm" onclick="switchView('articles')">查看全部 →</button>
+        </div>
+        <table>
+          <thead><tr><th>来源</th><th>标题</th><th>匹配关键词</th><th>时间</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="mono" style="font-size:11px;">Hacker News AI</span></td>
+              <td><a href="#" class="truncate" style="max-width:320px;">GPT-5 rumors: what we know so far about OpenAI's next model</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">GPT-5, OpenAI</span></td>
+              <td><span class="mono" style="font-size:11px;">14:25</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td>
+            </tr>
+            <tr>
+              <td><span class="mono" style="font-size:11px;">arXiv cs.AI</span></td>
+              <td><a href="#" class="truncate" style="max-width:320px;">Multimodal Learning Beyond Vision and Language: A Survey</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">多模态</span></td>
+              <td><span class="mono" style="font-size:11px;">14:18</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td>
+            </tr>
+            <tr>
+              <td><span class="mono" style="font-size:11px;">TechCrunch AI</span></td>
+              <td><a href="#" class="truncate" style="max-width:320px;">Open source AI models are catching up to proprietary ones</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">开源模型</span></td>
+              <td><span class="mono" style="font-size:11px;">14:12</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td>
+            </tr>
+            <tr>
+              <td><span class="mono" style="font-size:11px;">Reddit r/ML</span></td>
+              <td><a href="#" class="truncate" style="max-width:320px;">Meta releases LLaMA 4 technical report with new benchmarks</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">LLaMA</span></td>
+              <td><span class="mono" style="font-size:11px;">14:05</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td>
+            </tr>
+            <tr>
+              <td><span class="mono" style="font-size:11px;">Hacker News AI</span></td>
+              <td><a href="#" class="truncate" style="max-width:320px;">Building production RAG systems: lessons learned at scale</a></td>
+              <td><span class="mono" style="font-size:11px;color:var(--success);">RAG</span></td>
+              <td><span class="mono" style="font-size:11px;">13:58</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════ DATA SOURCES ══════ -->
+    <div class="view" id="view-sources">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">数据源管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('source-modal')">+ 添加数据源</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>名称</th><th>类型</th><th>URL</th><th>间隔(秒)</th><th>文章数</th><th>上次抓取</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr data-source-name="Hacker News AI"><td style="color:var(--fg);">Hacker News AI</td><td><span class="badge badge-neutral">RSS</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://hnrss.org/frontpage</span></td><td><span class="mono">300</span></td><td><span class="mono">89</span></td><td><span class="mono" style="font-size:11px;">14:30</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="arXiv cs.AI"><td style="color:var(--fg);">arXiv cs.AI</td><td><span class="badge badge-neutral">RSS</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://arxiv.org/rss/cs.AI</span></td><td><span class="mono">600</span></td><td><span class="mono">42</span></td><td><span class="mono" style="font-size:11px;">14:25</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="TechCrunch AI"><td style="color:var(--fg);">TechCrunch AI</td><td><span class="badge badge-neutral">RSS</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://techcrunch.com/tag/artificial-intelligence/feed/</span></td><td><span class="mono">300</span></td><td><span class="mono">31</span></td><td><span class="mono" style="font-size:11px;">14:28</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="Reddit r/ML"><td style="color:var(--fg);">Reddit r/ML</td><td><span class="badge badge-neutral">RSS</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://www.reddit.com/r/MachineLearning/.rss</span></td><td><span class="mono">300</span></td><td><span class="mono">56</span></td><td><span class="mono" style="font-size:11px;">14:20</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="The Verge AI"><td style="color:var(--fg);">The Verge AI</td><td><span class="badge badge-neutral">RSS</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://www.theverge.com/ai-artificial-intelligence/rss/index.xml</span></td><td><span class="mono">600</span></td><td><span class="mono">18</span></td><td><span class="mono" style="font-size:11px;">14:15</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="OpenAI Blog"><td style="color:var(--fg);">OpenAI Blog</td><td><span class="badge badge-neutral">API</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://api.openai.com/v1/...</span></td><td><span class="mono">900</span></td><td><span class="mono">5</span></td><td><span class="mono" style="font-size:11px;">13:50</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="HuggingFace Daily"><td style="color:var(--fg);">HuggingFace Daily</td><td><span class="badge badge-neutral">API</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://huggingface.co/api/daily_papers</span></td><td><span class="mono">3600</span></td><td><span class="mono">6</span></td><td><span class="mono" style="font-size:11px;">12:00</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">抓取</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+              <tr data-source-name="Google AI Blog"><td style="color:var(--fg);">Google AI Blog</td><td><span class="badge badge-neutral">API</span></td><td><span class="mono truncate" style="font-size:11px;max-width:200px;">https://ai.googleblog.com/feeds/posts/default</span></td><td><span class="mono">3600</span></td><td><span class="mono">0</span></td><td><span class="mono" style="font-size:11px;">06-04</span></td><td><span class="badge badge-danger"><span class="badge-dot danger-dot dot-show"></span>错误</span></td><td><button class="btn btn-ghost btn-sm source-fetch-btn">重试</button><button class="btn btn-ghost btn-sm" onclick="openModal('source-modal')">编辑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ KEYWORDS ══════ -->
+    <div class="view" id="view-keywords">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">关键词管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('keyword-modal')">+ 添加关键词</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>关键词</th><th>大小写</th><th>标准差倍数</th><th>最小计数</th><th>24h 命中</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr data-keyword="GPT-5"><td style="color:var(--fg);font-family:var(--font-mono);">GPT-5</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">3</span></td><td><span class="mono" style="color:var(--success);">47</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="多模态"><td style="color:var(--fg);font-family:var(--font-mono);">多模态</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">1.8</span></td><td><span class="mono">3</span></td><td><span class="mono" style="color:var(--success);">31</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="开源模型"><td style="color:var(--fg);font-family:var(--font-mono);">开源模型</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">5</span></td><td><span class="mono" style="color:var(--success);">28</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="LLaMA"><td style="color:var(--fg);font-family:var(--font-mono);">LLaMA</td><td><span class="mono" style="font-size:11px;">是</span></td><td><span class="mono">2.5</span></td><td><span class="mono">3</span></td><td><span class="mono" style="color:var(--success);">22</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="AGI"><td style="color:var(--fg);font-family:var(--font-mono);">AGI</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">3</span></td><td><span class="mono" style="color:var(--success);">19</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="diffusion"><td style="color:var(--fg);font-family:var(--font-mono);">diffusion</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">4</span></td><td><span class="mono" style="color:var(--success);">15</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="RAG"><td style="color:var(--fg);font-family:var(--font-mono);">RAG</td><td><span class="mono" style="font-size:11px;">是</span></td><td><span class="mono">1.5</span></td><td><span class="mono">2</span></td><td><span class="mono" style="color:var(--success);">14</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="fine-tuning"><td style="color:var(--fg);font-family:var(--font-mono);">fine-tuning</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">3</span></td><td><span class="mono" style="color:var(--success);">12</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="Claude"><td style="color:var(--fg);font-family:var(--font-mono);">Claude</td><td><span class="mono" style="font-size:11px;">是</span></td><td><span class="mono">2.0</span></td><td><span class="mono">2</span></td><td><span class="mono" style="color:var(--success);">10</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="RLHF"><td style="color:var(--fg);font-family:var(--font-mono);">RLHF</td><td><span class="mono" style="font-size:11px;">是</span></td><td><span class="mono">2.5</span></td><td><span class="mono">2</span></td><td><span class="mono" style="color:var(--success);">8</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>启用</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">暂停</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="embeddings"><td style="color:var(--fg);font-family:var(--font-mono);">embeddings</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">2.0</span></td><td><span class="mono">4</span></td><td><span class="mono" style="color:var(--success);">6</span></td><td><span class="badge badge-neutral"><span class="badge-dot dot-hide"></span>暂停</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">启用</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+              <tr data-keyword="transformer"><td style="color:var(--fg);font-family:var(--font-mono);">transformer</td><td><span class="mono" style="font-size:11px;">否</span></td><td><span class="mono">3.0</span></td><td><span class="mono">5</span></td><td><span class="mono" style="color:var(--success);">4</span></td><td><span class="badge badge-neutral"><span class="badge-dot dot-hide"></span>暂停</span></td><td><button class="btn btn-ghost btn-sm kw-toggle-btn">启用</button><button class="btn btn-ghost btn-sm" onclick="openModal('keyword-modal')">编辑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ PUSH CHANNELS ══════ -->
+    <div class="view" id="view-channels">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">推送渠道管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('channel-modal')">+ 添加渠道</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>名称</th><th>类型</th><th>Webhook URL</th><th>推送次数</th><th>上次推送</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr data-channel-name="钉钉告警群"><td style="color:var(--fg);">钉钉告警群</td><td><span class="badge badge-neutral">webhook</span></td><td><span class="mono truncate" style="font-size:11px;max-width:240px;">https://oapi.dingtalk.com/robot/send?access_token=****a1b2</span></td><td><span class="mono">28</span></td><td><span class="mono" style="font-size:11px;">14:30</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm ch-test-btn">测试</button><button class="btn btn-ghost btn-sm" onclick="openModal('channel-modal')">编辑</button></td></tr>
+              <tr data-channel-name="飞书通知频道"><td style="color:var(--fg);">飞书通知频道</td><td><span class="badge badge-neutral">webhook</span></td><td><span class="mono truncate" style="font-size:11px;max-width:240px;">https://open.feishu.cn/open-apis/bot/v2/hook/****c3d4</span></td><td><span class="mono">15</span></td><td><span class="mono" style="font-size:11px;">14:28</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>正常</span></td><td><button class="btn btn-ghost btn-sm ch-test-btn">测试</button><button class="btn btn-ghost btn-sm" onclick="openModal('channel-modal')">编辑</button></td></tr>
+              <tr data-channel-name="Slack #ai-alerts"><td style="color:var(--fg);">Slack #ai-alerts</td><td><span class="badge badge-neutral">webhook</span></td><td><span class="mono truncate" style="font-size:11px;max-width:240px;">https://hooks.slack.com/services/****/****/****e5f6</span></td><td><span class="mono">0</span></td><td><span class="mono" style="font-size:11px;">—</span></td><td><span class="badge badge-neutral"><span class="badge-dot dot-hide"></span>已禁用</span></td><td><button class="btn btn-ghost btn-sm ch-test-btn">测试</button><button class="btn btn-ghost btn-sm" onclick="openModal('channel-modal')">编辑</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ ARTICLES ══════ -->
+    <div class="view" id="view-articles">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">文章日志</span>
+          <div class="panel-actions"><button class="btn btn-ghost btn-sm" onclick="showToast('过滤器已触发，正在处理...')">运行过滤器</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>来源</th><th>标题</th><th>匹配关键词</th><th>发布时间</th><th>处理状态</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">1</span></td><td><span class="mono" style="font-size:11px;">Hacker News AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">GPT-5 rumors: what we know so far about OpenAI's next model</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">GPT-5, OpenAI</span></td><td><span class="mono" style="font-size:11px;">14:25</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">2</span></td><td><span class="mono" style="font-size:11px;">arXiv cs.AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Multimodal Learning Beyond Vision and Language: A Survey</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">多模态</span></td><td><span class="mono" style="font-size:11px;">14:18</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">3</span></td><td><span class="mono" style="font-size:11px;">TechCrunch AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Open source AI models are catching up to proprietary ones</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">开源模型</span></td><td><span class="mono" style="font-size:11px;">14:12</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">4</span></td><td><span class="mono" style="font-size:11px;">Reddit r/ML</span></td><td><a href="#" class="truncate" style="max-width:340px;">Meta releases LLaMA 4 technical report with new benchmarks</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">LLaMA</span></td><td><span class="mono" style="font-size:11px;">14:05</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">5</span></td><td><span class="mono" style="font-size:11px;">Hacker News AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Building production RAG systems: lessons learned at scale</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">RAG</span></td><td><span class="mono" style="font-size:11px;">13:58</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">6</span></td><td><span class="mono" style="font-size:11px;">The Verge AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Why everyone is talking about AGI timelines again</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">AGI</span></td><td><span class="mono" style="font-size:11px;">13:45</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">7</span></td><td><span class="mono" style="font-size:11px;">arXiv cs.AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Improving Diffusion Models with Adaptive Noise Scheduling</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">diffusion</span></td><td><span class="mono" style="font-size:11px;">13:30</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">8</span></td><td><span class="mono" style="font-size:11px;">TechCrunch AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">Anthropic's Claude gets major multimodal update</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">Claude, 多模态</span></td><td><span class="mono" style="font-size:11px;">13:20</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">9</span></td><td><span class="mono" style="font-size:11px;">Reddit r/ML</span></td><td><a href="#" class="truncate" style="max-width:340px;">Fine-tuning Llama 3 with QLoRA on a single GPU</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">fine-tuning, LLaMA</span></td><td><span class="mono" style="font-size:11px;">13:15</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>已处理</span></td></tr>
+              <tr><td><span class="mono" style="font-size:11px;color:var(--meta);">10</span></td><td><span class="mono" style="font-size:11px;">Hacker News AI</span></td><td><a href="#" class="truncate" style="max-width:340px;">RLHF is dead, long live DPO: the new alignment paradigm</a></td><td><span class="mono" style="font-size:11px;color:var(--success);">RLHF</span></td><td><span class="mono" style="font-size:11px;">13:08</span></td><td><span class="badge badge-warn"><span class="badge-dot warn-dot dot-show"></span>待处理</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ API TOKENS ══════ -->
+    <div class="view" id="view-tokens">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">API 令牌管理</span>
+          <button class="btn btn-primary btn-sm" onclick="openModal('token-modal')">+ 生成令牌</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>名称</th><th>最后使用</th><th>过期时间</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr data-token-name="前端 UI" data-token-revoked="0"><td style="color:var(--fg);">前端 UI</td><td><span class="mono" style="font-size:11px;">14:32</span></td><td><span class="mono" style="font-size:11px;">永久</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>有效</span></td><td class="token-actions"><span class="token-active-only"><button class="btn btn-ghost btn-sm copy-token-btn">复制</button><button class="btn btn-danger btn-sm revoke-token-btn">吊销</button></span><span class="token-revoked-only" style="display:none;"><span class="mono" style="font-size:11px;color:var(--meta);">—</span></span></td></tr>
+              <tr data-token-name="CLI 工具" data-token-revoked="0"><td style="color:var(--fg);">CLI 工具</td><td><span class="mono" style="font-size:11px;">12:15</span></td><td><span class="mono" style="font-size:11px;">永久</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>有效</span></td><td class="token-actions"><span class="token-active-only"><button class="btn btn-ghost btn-sm copy-token-btn">复制</button><button class="btn btn-danger btn-sm revoke-token-btn">吊销</button></span><span class="token-revoked-only" style="display:none;"><span class="mono" style="font-size:11px;color:var(--meta);">—</span></span></td></tr>
+              <tr data-token-name="GitHub Action" data-token-revoked="0"><td style="color:var(--fg);">GitHub Action</td><td><span class="mono" style="font-size:11px;">10:48</span></td><td><span class="mono" style="font-size:11px;">2026-09-06</span></td><td><span class="badge badge-success"><span class="badge-dot success-dot dot-show"></span>有效</span></td><td class="token-actions"><span class="token-active-only"><button class="btn btn-ghost btn-sm copy-token-btn">复制</button><button class="btn btn-danger btn-sm revoke-token-btn">吊销</button></span><span class="token-revoked-only" style="display:none;"><span class="mono" style="font-size:11px;color:var(--meta);">—</span></span></td></tr>
+              <tr data-token-name="测试用 Token" data-token-revoked="1"><td style="color:var(--fg);">测试用 Token</td><td><span class="mono" style="font-size:11px;">2026-05-30</span></td><td><span class="mono" style="font-size:11px;">永久</span></td><td><span class="badge badge-danger"><span class="badge-dot danger-dot dot-show"></span>已吊销</span></td><td class="token-actions"><span class="token-active-only"><button class="btn btn-ghost btn-sm copy-token-btn">复制</button><button class="btn btn-danger btn-sm revoke-token-btn">吊销</button></span><span class="token-revoked-only" style="display:none;"><span class="mono" style="font-size:11px;color:var(--meta);">—</span></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ SETTINGS ══════ -->
+    <div class="view" id="view-settings">
+      <div class="settings-grid">
+        <div class="settings-group"><h4>解析器配置</h4>
+          <div class="setting-row"><span class="setting-label">最大并发抓取数</span><span class="setting-value">10</span></div>
+          <div class="setting-row"><span class="setting-label">默认超时时间（秒）</span><span class="setting-value">30</span></div>
+          <div class="setting-row"><span class="setting-label">默认抓取间隔（秒）</span><span class="setting-value">300</span></div>
+        </div>
+        <div class="settings-group"><h4>过滤器配置</h4>
+          <div class="setting-row"><span class="setting-label">批处理大小</span><span class="setting-value">1000</span></div>
+          <div class="setting-row"><span class="setting-label">运行间隔（秒）</span><span class="setting-value">300</span></div>
+          <div class="setting-row"><span class="setting-label">历史窗口（小时）</span><span class="setting-value">24</span></div>
+          <div class="setting-row"><span class="setting-label">最小历史数据（小时）</span><span class="setting-value">6</span></div>
+        </div>
+        <div class="settings-group"><h4>推送器配置</h4>
+          <div class="setting-row"><span class="setting-label">轮询间隔（秒）</span><span class="setting-value">10</span></div>
+          <div class="setting-row"><span class="setting-label">最大重试次数</span><span class="setting-value">3</span></div>
+          <div class="setting-row"><span class="setting-label">重试基础间隔（秒）</span><span class="setting-value">60</span></div>
+        </div>
+        <div class="settings-group"><h4>服务器配置</h4>
+          <div class="setting-row"><span class="setting-label">监听地址</span><span class="setting-value">0.0.0.0</span></div>
+          <div class="setting-row"><span class="setting-label">端口</span><span class="setting-value">8080</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ─── Modals ──────────────────────────────── -->
+<div class="modal-overlay" id="source-modal"><div class="modal">
+  <h3>添加数据源</h3>
+  <div class="field"><label>名称</label><input type="text" placeholder="例如：Hacker News AI" /></div>
+  <div class="field"><label>类型</label><select><option>RSS</option><option>API</option><option>Atom</option></select></div>
+  <div class="field"><label>URL</label><input type="text" placeholder="https://..." /></div>
+  <div class="field"><label>拉取间隔（秒）</label><input type="number" value="300" /><span class="field-help">默认 300 秒（5 分钟）</span></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('source-modal')">取消</button><button class="btn btn-primary" onclick="closeModal('source-modal');showToast('数据源已添加')">确认添加</button></div>
+</div></div>
+
+<div class="modal-overlay" id="keyword-modal"><div class="modal">
+  <h3>添加关键词</h3>
+  <div class="field"><label>关键词</label><input type="text" placeholder="例如：GPT-5" /></div>
+  <div class="field"><label>大小写敏感</label><select><option>否</option><option>是</option></select></div>
+  <div class="field"><label>标准差倍数</label><input type="number" value="2.0" step="0.1" /><span class="field-help">默认 2.0，值越低越敏感</span></div>
+  <div class="field"><label>最小触发计数</label><input type="number" value="3" /></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('keyword-modal')">取消</button><button class="btn btn-primary" onclick="closeModal('keyword-modal');showToast('关键词已添加')">确认添加</button></div>
+</div></div>
+
+<div class="modal-overlay" id="channel-modal"><div class="modal">
+  <h3>添加推送渠道</h3>
+  <div class="field"><label>名称</label><input type="text" placeholder="例如：钉钉告警群" /></div>
+  <div class="field"><label>类型</label><select><option>webhook</option></select></div>
+  <div class="field"><label>Webhook URL</label><input type="text" placeholder="https://..." /></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('channel-modal')">取消</button><button class="btn btn-primary" onclick="closeModal('channel-modal');showToast('推送渠道已添加')">确认添加</button></div>
+</div></div>
+
+<div class="modal-overlay" id="token-modal"><div class="modal">
+  <h3>生成 API 令牌</h3>
+  <div class="field"><label>令牌名称 / 用途</label><input type="text" placeholder="例如：前端 UI、CLI 工具" /></div>
+  <div class="field"><label>过期时间（留空为永久）</label><input type="date" /><span class="field-help">留空则永不过期</span></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal('token-modal')">取消</button><button class="btn btn-primary" onclick="closeModal('token-modal');showToast('令牌已生成，请妥善保存')">确认生成</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  var viewTitles = { dashboard:'仪表盘', sources:'数据源管理', keywords:'关键词管理', channels:'推送渠道管理', articles:'文章日志', tokens:'API 令牌管理', settings:'系统设置' };
+
+  window.switchView = function(name) {
+    document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+    var t = document.getElementById('view-'+name); if (t) t.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    var n = document.querySelector('.nav-item[data-view="'+name+'"]'); if (n) n.classList.add('active');
+    document.getElementById('viewTitle').textContent = viewTitles[name] || name;
+    document.getElementById('sidebar').classList.remove('open');
+    try { localStorage.setItem('hotspot-monitor-view', name); } catch(e) {}
+  };
+
+  window.toggleSidebar = function() { document.getElementById('sidebar').classList.toggle('open'); };
+
+  window.openModal = function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.classList.add('open'); var inp = el.querySelector('input'); if (inp) setTimeout(function() { inp.focus(); }, 100); }
+  };
+
+  window.closeModal = function(id) { var el = document.getElementById(id); if (el) el.classList.remove('open'); };
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+  });
+
+  var tt; window.showToast = function(msg) {
+    var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(tt); tt = setTimeout(function() { t.classList.remove('show'); }, 2000);
+  };
+
+  document.getElementById('mainContent').addEventListener('click', function(e) {
+    var btn = e.target.closest('button'); if (!btn) return;
+    if (btn.classList.contains('source-fetch-btn')) {
+      var r = btn.closest('tr'); var n = r ? r.getAttribute('data-source-name') : ''; showToast('手动抓取已触发: '+(n||'未知'));
+    }
+    if (btn.classList.contains('kw-toggle-btn')) {
+      var r = btn.closest('tr'); var kw = r ? r.getAttribute('data-keyword') : '';
+      showToast(kw+': '+(btn.textContent.trim()==='暂停'?'已暂停':'已启用'));
+    }
+    if (btn.classList.contains('ch-test-btn')) {
+      var r = btn.closest('tr'); var n = r ? r.getAttribute('data-channel-name') : ''; showToast('测试推送已发送: '+(n||'未知'));
+    }
+    if (btn.classList.contains('copy-token-btn')) {
+      var r = btn.closest('tr'); var n = r ? r.getAttribute('data-token-name') : ''; showToast('令牌已复制: '+(n||''));
+    }
+    if (btn.classList.contains('revoke-token-btn')) {
+      var r = btn.closest('tr'); var n = r ? r.getAttribute('data-token-name') : '';
+      if (confirm('确定要吊销令牌 "'+n+'" 吗？')) showToast('已吊销: '+(n||''));
+    }
+  });
+
+  function applyTokenStates() {
+    document.querySelectorAll('[data-token-revoked]').forEach(function(row) {
+      var revoked = row.getAttribute('data-token-revoked') === '1';
+      row.querySelectorAll('.token-active-only').forEach(function(e) { e.style.display = revoked?'none':''; });
+      row.querySelectorAll('.token-revoked-only').forEach(function(e) { e.style.display = revoked?'':'none'; });
+    });
+  }
+
+  var saved; try { saved = localStorage.getItem('hotspot-monitor-view'); } catch(e) {}
+  if (saved && viewTitles[saved]) switchView(saved);
+  setTimeout(applyTokenStates, 50);
+})();
+</script>
+</body>
+</html>

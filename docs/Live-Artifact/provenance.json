@@ -1,0 +1,21 @@
+{
+  "source": "mock",
+  "description": "模拟数据：8 个数据源、12 个关键词、3 个推送渠道、4 个 API 令牌、10 篇文章、3 个活跃热点",
+  "generatedAt": "2026-06-06",
+  "designSystem": "warp",
+  "transformationNotes": "所有显示值已预计算为 data.json 中的静态属性，以适应 html_template_v1 仅支持 {{data.path}} 和 data-od-repeat 绑定的限制。热点偏离值基于模拟的正态分布计算。",
+  "sources": [
+    {
+      "type": "mock",
+      "label": "模拟数据源",
+      "entityCounts": {
+        "dataSources": 8,
+        "keywords": 12,
+        "channels": 3,
+        "tokens": 4,
+        "articles": 10,
+        "hotspots": 3
+      }
+    }
+  ]
+}

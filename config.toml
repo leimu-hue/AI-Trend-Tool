@@ -1,0 +1,26 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[database]
+path = "./docs/data/hotspot.db"
+
+[auth]
+# Initial token (only auto-created when api_tokens table is empty)
+initial_token = "optional-initial-token"
+
+[parser]
+max_concurrent_fetches = 10
+default_user_agent = "HotspotMonitor/1.0"
+default_timeout_seconds = 30
+
+[filter]
+batch_size = 1000
+interval_seconds = 300
+history_hours = 24
+min_history_hours = 6
+
+[pusher]
+interval_seconds = 10
+max_retries = 3
+retry_base_seconds = 60

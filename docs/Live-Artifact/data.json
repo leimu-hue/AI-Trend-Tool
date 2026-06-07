@@ -1,0 +1,95 @@
+{
+  "summary": {
+    "title": "AI 热点监控",
+    "subtitle": "多源实时监控 · 关键词告警 · 趋势分析",
+    "lastSync": "2026-06-06 14:32:08 UTC",
+    "version": "v1.2.0"
+  },
+  "stats": [
+    { "label": "数据源", "value": "8", "sub": "5 RSS + 3 API", "trendClass": "" },
+    { "label": "关键词", "value": "12", "sub": "10 启用 · 2 暂停", "trendClass": "" },
+    { "label": "今日文章", "value": "247", "sub": "较昨日 +18%", "trendClass": "up" },
+    { "label": "活跃热点", "value": "3", "sub": "2 已推送 · 1 待处理", "trendClass": "warn" }
+  ],
+  "hotspots": [
+    { "keyword": "GPT-5", "count": "47 次/小时", "deviation": "12.5σ", "severityClass": "critical", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已推送" },
+    { "keyword": "多模态", "count": "31 次/小时", "deviation": "8.8σ", "severityClass": "high", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已推送" },
+    { "keyword": "开源模型", "count": "28 次/小时", "deviation": "6.1σ", "severityClass": "medium", "badgeClass": "badge-warn", "dotClass": "warn-dot dot-show", "statusLabel": "待推送" }
+  ],
+  "trendPoints": "0,140 55,128 110,135 165,118 220,124 275,108 330,98 385,112 440,95 495,105 550,82 605,90 660,68 715,75 770,55 825,62 880,42",
+  "trendArea": "0,200 0,140 55,128 110,135 165,118 220,124 275,108 330,98 385,112 440,95 495,105 550,82 605,90 660,68 715,75 770,55 825,62 880,42 880,200",
+  "trendLabels": ["12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00"],
+  "sources": [
+    { "name": "Hacker News AI", "type": "RSS", "url": "https://hnrss.org/frontpage", "interval": "300", "articleCount": "89", "lastFetched": "14:30", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "arXiv cs.AI", "type": "RSS", "url": "https://arxiv.org/rss/cs.AI", "interval": "600", "articleCount": "42", "lastFetched": "14:25", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "TechCrunch AI", "type": "RSS", "url": "https://techcrunch.com/tag/artificial-intelligence/feed/", "interval": "300", "articleCount": "31", "lastFetched": "14:28", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "Reddit r/ML", "type": "RSS", "url": "https://www.reddit.com/r/MachineLearning/.rss", "interval": "300", "articleCount": "56", "lastFetched": "14:20", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "The Verge AI", "type": "RSS", "url": "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml", "interval": "600", "articleCount": "18", "lastFetched": "14:15", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "OpenAI Blog", "type": "API", "url": "https://api.openai.com/v1/...", "interval": "900", "articleCount": "5", "lastFetched": "13:50", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "HuggingFace Daily", "type": "API", "url": "https://huggingface.co/api/daily_papers", "interval": "3600", "articleCount": "6", "lastFetched": "12:00", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常", "fetchLabel": "抓取" },
+    { "name": "Google AI Blog", "type": "API", "url": "https://ai.googleblog.com/feeds/posts/default", "interval": "3600", "articleCount": "0", "lastFetched": "06-04", "badgeClass": "badge-danger", "dotClass": "danger-dot dot-show", "statusLabel": "错误", "fetchLabel": "重试" }
+  ],
+  "keywords": [
+    { "word": "GPT-5", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "3", "matchCount": "47", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "多模态", "caseLabel": "否", "stdMultiplier": "1.8", "minHotCount": "3", "matchCount": "31", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "开源模型", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "5", "matchCount": "28", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "LLaMA", "caseLabel": "是", "stdMultiplier": "2.5", "minHotCount": "3", "matchCount": "22", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "AGI", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "3", "matchCount": "19", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "diffusion", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "4", "matchCount": "15", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "RAG", "caseLabel": "是", "stdMultiplier": "1.5", "minHotCount": "2", "matchCount": "14", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "fine-tuning", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "3", "matchCount": "12", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "Claude", "caseLabel": "是", "stdMultiplier": "2.0", "minHotCount": "2", "matchCount": "10", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "RLHF", "caseLabel": "是", "stdMultiplier": "2.5", "minHotCount": "2", "matchCount": "8", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "启用", "toggleLabel": "暂停" },
+    { "word": "embeddings", "caseLabel": "否", "stdMultiplier": "2.0", "minHotCount": "4", "matchCount": "6", "badgeClass": "badge-neutral", "dotClass": "dot-hide", "statusLabel": "暂停", "toggleLabel": "启用" },
+    { "word": "transformer", "caseLabel": "否", "stdMultiplier": "3.0", "minHotCount": "5", "matchCount": "4", "badgeClass": "badge-neutral", "dotClass": "dot-hide", "statusLabel": "暂停", "toggleLabel": "启用" }
+  ],
+  "channels": [
+    { "name": "钉钉告警群", "type": "webhook", "url": "https://oapi.dingtalk.com/robot/send?access_token=****a1b2", "pushCount": "28", "lastPush": "14:30", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常" },
+    { "name": "飞书通知频道", "type": "webhook", "url": "https://open.feishu.cn/open-apis/bot/v2/hook/****c3d4", "pushCount": "15", "lastPush": "14:28", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "正常" },
+    { "name": "Slack #ai-alerts", "type": "webhook", "url": "https://hooks.slack.com/services/****/****/****e5f6", "pushCount": "0", "lastPush": "—", "badgeClass": "badge-neutral", "dotClass": "dot-hide", "statusLabel": "已禁用" }
+  ],
+  "dashboardArticles": [
+    { "source": "Hacker News AI", "title": "GPT-5 rumors: what we know so far about OpenAI's next model", "link": "#", "matchedKeywords": "GPT-5, OpenAI", "publishedAt": "14:25", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "source": "arXiv cs.AI", "title": "Multimodal Learning Beyond Vision and Language: A Survey", "link": "#", "matchedKeywords": "多模态", "publishedAt": "14:18", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "source": "TechCrunch AI", "title": "Open source AI models are catching up to proprietary ones", "link": "#", "matchedKeywords": "开源模型", "publishedAt": "14:12", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "source": "Reddit r/ML", "title": "Meta releases LLaMA 4 technical report with new benchmarks", "link": "#", "matchedKeywords": "LLaMA", "publishedAt": "14:05", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "source": "Hacker News AI", "title": "Building production RAG systems: lessons learned at scale", "link": "#", "matchedKeywords": "RAG", "publishedAt": "13:58", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" }
+  ],
+  "articles": [
+    { "id": "1", "source": "Hacker News AI", "title": "GPT-5 rumors: what we know so far about OpenAI's next model", "link": "#", "matchedKeywords": "GPT-5, OpenAI", "publishedAt": "14:25", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "2", "source": "arXiv cs.AI", "title": "Multimodal Learning Beyond Vision and Language: A Survey", "link": "#", "matchedKeywords": "多模态", "publishedAt": "14:18", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "3", "source": "TechCrunch AI", "title": "Open source AI models are catching up to proprietary ones", "link": "#", "matchedKeywords": "开源模型", "publishedAt": "14:12", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "4", "source": "Reddit r/ML", "title": "Meta releases LLaMA 4 technical report with new benchmarks", "link": "#", "matchedKeywords": "LLaMA", "publishedAt": "14:05", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "5", "source": "Hacker News AI", "title": "Building production RAG systems: lessons learned at scale", "link": "#", "matchedKeywords": "RAG", "publishedAt": "13:58", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "6", "source": "The Verge AI", "title": "Why everyone is talking about AGI timelines again", "link": "#", "matchedKeywords": "AGI", "publishedAt": "13:45", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "7", "source": "arXiv cs.AI", "title": "Improving Diffusion Models with Adaptive Noise Scheduling", "link": "#", "matchedKeywords": "diffusion", "publishedAt": "13:30", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "8", "source": "TechCrunch AI", "title": "Anthropic's Claude gets major multimodal update", "link": "#", "matchedKeywords": "Claude, 多模态", "publishedAt": "13:20", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "9", "source": "Reddit r/ML", "title": "Fine-tuning Llama 3 with QLoRA on a single GPU", "link": "#", "matchedKeywords": "fine-tuning, LLaMA", "publishedAt": "13:15", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "已处理" },
+    { "id": "10", "source": "Hacker News AI", "title": "RLHF is dead, long live DPO: the new alignment paradigm", "link": "#", "matchedKeywords": "RLHF", "publishedAt": "13:08", "badgeClass": "badge-warn", "dotClass": "warn-dot dot-show", "statusLabel": "待处理" }
+  ],
+  "tokens": [
+    { "name": "前端 UI", "lastUsed": "14:32", "expiresAt": "永久", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "有效", "revoked": "0" },
+    { "name": "CLI 工具", "lastUsed": "12:15", "expiresAt": "永久", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "有效", "revoked": "0" },
+    { "name": "GitHub Action", "lastUsed": "10:48", "expiresAt": "2026-09-06", "badgeClass": "badge-success", "dotClass": "success-dot dot-show", "statusLabel": "有效", "revoked": "0" },
+    { "name": "测试用 Token", "lastUsed": "2026-05-30", "expiresAt": "永久", "badgeClass": "badge-danger", "dotClass": "danger-dot dot-show", "statusLabel": "已吊销", "revoked": "1" }
+  ],
+  "settings": {
+    "maxConcurrentFetches": "10",
+    "defaultTimeout": "30",
+    "defaultInterval": "300",
+    "batchSize": "1000",
+    "filterIntervalSec": "300",
+    "historyHours": "24",
+    "minHistoryHours": "6",
+    "pusherIntervalSec": "10",
+    "maxRetries": "3",
+    "retryBaseSec": "60",
+    "host": "0.0.0.0",
+    "port": "8080"
+  },
+  "footer": {
+    "live": "LIVE",
+    "refreshLabel": "监控中 · 每5分钟自动刷新",
+    "version": "Hotspot Monitor v1.2.0"
+  }
+}
