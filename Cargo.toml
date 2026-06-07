@@ -41,3 +41,26 @@ hex = "0.4"
 
 # CLI argument parsing
 clap = { version = "4", features = ["derive"] }
+
+# Async trait (extensible parser)
+async-trait = "0.1"
+
+# ─── Profile: Release (production build) ───
+[profile.release]
+opt-level = 3          # Maximum optimization
+lto = "fat"            # Full Link-Time Optimization across crates
+codegen-units = 1      # Single codegen unit for better optimization (slower compile, faster binary)
+strip = "symbols"      # Strip debug symbols to reduce binary size
+panic = "abort"        # Abort on panic (smaller binary, no unwinding overhead)
+incremental = false     # Disable incremental compilation for best optimization
+overflow-checks = false # Disable integer overflow checks in release
+
+# ─── Profile: Dev (fast iteration) ───
+[profile.dev]
+opt-level = 0          # No optimization for fast compile
+incremental = true      # Enable incremental compilation
+
+# ─── Profile: Dev-opt (optimized debug) ───
+[profile.dev-opt]
+inherits = "dev"
+opt-level = 2          # Optimize for performance while keeping debug info

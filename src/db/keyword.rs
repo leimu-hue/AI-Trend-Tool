@@ -24,20 +24,13 @@ pub async fn list_keywords(pool: &SqlitePool) -> Result<Vec<Keyword>, sqlx::Erro
         .await
 }
 
-pub async fn list_enabled_keywords(
-    pool: &SqlitePool,
-) -> Result<Vec<Keyword>, sqlx::Error> {
-    sqlx::query_as::<_, Keyword>(
-        "SELECT * FROM keywords WHERE enabled = 1 ORDER BY word",
-    )
-    .fetch_all(pool)
-    .await
+pub async fn list_enabled_keywords(pool: &SqlitePool) -> Result<Vec<Keyword>, sqlx::Error> {
+    sqlx::query_as::<_, Keyword>("SELECT * FROM keywords WHERE enabled = 1 ORDER BY word")
+        .fetch_all(pool)
+        .await
 }
 
-pub async fn get_keyword_by_id(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<Option<Keyword>, sqlx::Error> {
+pub async fn get_keyword_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Keyword>, sqlx::Error> {
     sqlx::query_as::<_, Keyword>("SELECT * FROM keywords WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)

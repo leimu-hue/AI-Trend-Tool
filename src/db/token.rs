@@ -27,10 +27,7 @@ pub async fn list_tokens(pool: &SqlitePool) -> Result<Vec<ApiToken>, sqlx::Error
     .await
 }
 
-pub async fn get_token_by_id(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<Option<ApiToken>, sqlx::Error> {
+pub async fn get_token_by_id(pool: &SqlitePool, id: i64) -> Result<Option<ApiToken>, sqlx::Error> {
     sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -47,10 +44,7 @@ pub async fn get_token_by_value(
         .await
 }
 
-pub async fn update_token_last_used(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<(), sqlx::Error> {
+pub async fn update_token_last_used(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -74,9 +68,7 @@ pub async fn count_all_tokens(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
 }
 
 /// Get the first non-revoked token (for startup console display).
-pub async fn get_first_active_token(
-    pool: &SqlitePool,
-) -> Result<Option<ApiToken>, sqlx::Error> {
+pub async fn get_first_active_token(pool: &SqlitePool) -> Result<Option<ApiToken>, sqlx::Error> {
     sqlx::query_as::<_, ApiToken>(
         "SELECT * FROM api_tokens WHERE revoked = 0 ORDER BY created_at ASC LIMIT 1",
     )

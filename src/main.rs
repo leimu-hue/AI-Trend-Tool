@@ -5,6 +5,7 @@ mod handlers;
 mod middleware;
 mod models;
 mod routes;
+mod services;
 
 use clap::Parser;
 use sqlx::SqlitePool;
@@ -82,14 +83,81 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ensure at least one API token exists (first startup bootstrap)
     ensure_initial_token(&pool, &config).await?;
 
-    // Build router
-    let app = routes::create_router(pool.clone(), config.clone());
+    // Mode-based background task spawning
+    match cli.mode.as_str() {
+        "all" | "api" => {
+            // Spawn all three background tasks
+            let parser_pool = pool.clone();
+            let parser_cfg = config.parser.clone();
+            let filter_pool = pool.clone();
+            let filter_cfg = config.filter.clone();
+            let pusher_pool = pool.clone();
+            let pusher_cfg = config.pusher.clone();
 
-    let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
-    tracing::info!("Server listening on {}", addr);
+            tokio::spawn(async move {
+                services::parser::start_parser_loop(parser_pool, parser_cfg).await;
+            });
+            tokio::spawn(async move {
+                services::filter::start_filter_loop(filter_pool, filter_cfg).await;
+            });
+            tokio::spawn(async move {
+                services::pusher::start_pusher_loop(pusher_pool, pusher_cfg).await;
+            });
 
-    let listener = TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+            tracing::info!(
+                "Mode '{}': parser + filter + pusher running in background",
+                cli.mode
+            );
+
+            // Build router and start API server
+            let app = routes::create_router(pool.clone(), config.clone());
+
+            let addr: SocketAddr =
+                format!("{}:{}", config.server.host, config.server.port).parse()?;
+            tracing::info!("Server listening on {}", addr);
+
+            let listener = TcpListener::bind(addr).await?;
+            axum::serve(listener, app).await?;
+        }
+        "parser" => {
+            tracing::info!("Mode 'parser': running parser only");
+            services::parser::start_parser_loop(pool.clone(), config.parser.clone()).await;
+        }
+        "filter" => {
+            tracing::info!("Mode 'filter': running filter only");
+            services::filter::start_filter_loop(pool.clone(), config.filter.clone()).await;
+        }
+        "pusher" => {
+            tracing::info!("Mode 'pusher': running pusher only");
+            services::pusher::start_pusher_loop(pool.clone(), config.pusher.clone()).await;
+        }
+        other => {
+            tracing::warn!("Unknown mode '{}', defaulting to 'all'", other);
+            let parser_pool = pool.clone();
+            let parser_cfg = config.parser.clone();
+            let filter_pool = pool.clone();
+            let filter_cfg = config.filter.clone();
+            let pusher_pool = pool.clone();
+            let pusher_cfg = config.pusher.clone();
+
+            tokio::spawn(async move {
+                services::parser::start_parser_loop(parser_pool, parser_cfg).await;
+            });
+            tokio::spawn(async move {
+                services::filter::start_filter_loop(filter_pool, filter_cfg).await;
+            });
+            tokio::spawn(async move {
+                services::pusher::start_pusher_loop(pusher_pool, pusher_cfg).await;
+            });
+
+            let app = routes::create_router(pool.clone(), config.clone());
+            let addr: SocketAddr =
+                format!("{}:{}", config.server.host, config.server.port).parse()?;
+            tracing::info!("Server listening on {}", addr);
+            let listener = TcpListener::bind(addr).await?;
+            axum::serve(listener, app).await?;
+        }
+    }
 
     Ok(())
 }

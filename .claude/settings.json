@@ -11,7 +11,21 @@
       "Bash(Get-ChildItem -Path openspec/changes/implement-crud-apis/specs -Recurse -Name)",
       "Bash(Get-ChildItem -Path openspec/specs -Directory -Name)",
       "PowerShell(New-Item -ItemType Directory -Force -Path openspec/changes/archive)",
-      "PowerShell(Move-Item -Path openspec/changes/implement-crud-apis -Destination openspec/changes/archive/2026-06-07-implement-crud-apis)"
+      "PowerShell(Move-Item -Path openspec/changes/implement-crud-apis -Destination openspec/changes/archive/2026-06-07-implement-crud-apis)",
+      "Bash(openspec list *)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"src/services\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"src/services\")",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/articles)",
+      "Bash(kill %1)",
+      "Bash(wait %1)",
+      "Bash(curl -s -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/hotspots)",
+      "Bash(curl -s -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/hotspots/1/push-records)",
+      "Bash(curl -s -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/trend/1)",
+      "Bash(curl -s -X POST -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/trigger/filter)",
+      "Bash(curl -s -X POST -H \"Authorization: Bearer optional-initial-token\" http://localhost:3000/api/v1/trigger/pusher)",
+      "PowerShell(Get-Process -Name \"trend-monitor\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)"
     ]
   }
 }

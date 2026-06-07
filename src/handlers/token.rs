@@ -23,8 +23,8 @@ pub async fn create_token(
     let bytes: [u8; 32] = rand::thread_rng().gen();
     let token_str = hex::encode(bytes);
 
-    let token: ApiToken = db::token::create_token(&state.pool, &req.name, &token_str, req.expires_at)
-        .await?;
+    let token: ApiToken =
+        db::token::create_token(&state.pool, &req.name, &token_str, req.expires_at).await?;
 
     Ok(ApiResponse::created(token))
 }

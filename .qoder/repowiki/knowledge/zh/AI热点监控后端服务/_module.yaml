@@ -2,18 +2,18 @@ schema_version: 1
 module_path: ""
 title: AI热点监控后端服务
 scope:
-    - .gitignore
-    - CLAUDE.md
-    - Cargo.lock
-    - Cargo.toml
-    - README.md
-    - config.toml
-    - skills-lock.json
-    - .agents/
-    - .claude/
+    - src/
     - docs/
     - openspec/
-    - src/
+    - .agents/
+    - .claude/
+    - Cargo.toml
+    - Cargo.lock
+    - config.toml
+    - README.md
+    - CLAUDE.md
+    - skills-lock.json
+    - .gitignore
     - .agents\skills\design-taste-frontend\SKILL.md
     - .agents\skills\full-output-enforcement\SKILL.md
     - .agents\skills\minimalist-ui\SKILL.md
@@ -24,6 +24,7 @@ scope:
     - .claude\commands\opsx\sync.md
     - .claude\commands\opsx\verify.md
     - .claude\settings.json
+    - .claude\settings.local.json
     - .claude\skills\design-taste-frontend\SKILL.md
     - .claude\skills\full-output-enforcement\SKILL.md
     - .claude\skills\minimalist-ui\SKILL.md
@@ -76,6 +77,13 @@ scope:
     - openspec\changes\archive\2026-06-07-db-migrations-and-models\specs\data-models\spec.md
     - openspec\changes\archive\2026-06-07-db-migrations-and-models\specs\database-schema\spec.md
     - openspec\changes\archive\2026-06-07-db-migrations-and-models\tasks.md
+    - openspec\changes\implement-crud-apis\.openspec.yaml
+    - openspec\changes\implement-crud-apis\design.md
+    - openspec\changes\implement-crud-apis\proposal.md
+    - openspec\changes\implement-crud-apis\specs\channel-crud-api\spec.md
+    - openspec\changes\implement-crud-apis\specs\keyword-crud-api\spec.md
+    - openspec\changes\implement-crud-apis\specs\source-crud-api\spec.md
+    - openspec\changes\implement-crud-apis\tasks.md
     - openspec\config.yaml
     - openspec\specs\auth-middleware\spec.md
     - openspec\specs\backend-project-scaffold\spec.md
@@ -96,6 +104,9 @@ scope:
     - src\error.rs
     - src\handlers.rs
     - src\handlers\.gitkeep
+    - src\handlers\channel.rs
+    - src\handlers\keyword.rs
+    - src\handlers\source.rs
     - src\handlers\token.rs
     - src\main.rs
     - src\middleware.rs

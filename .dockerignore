@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+
+# Version control
+.git/
+.gitignore
+
+# IDE & editor
+.vscode/
+.idea/
+*.sublime-*
+
+# Documentation (not needed in build)
+docs/Live-Artifact/
+docs/plans/
+docs/apis/
+openspec/
+.agents/
+.claude/
+.qoder/
+
+# OS files
+Thumbs.db
+DS_Store
+
+# Logs
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml

@@ -94,10 +94,7 @@ fn build_article_filter(query: &ArticleQuery) -> (String, Vec<(String, String)>)
     (where_clause, vec![])
 }
 
-pub async fn get_article_by_id(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<Option<Article>, sqlx::Error> {
+pub async fn get_article_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Article>, sqlx::Error> {
     sqlx::query_as::<_, Article>("SELECT * FROM articles WHERE id = ?")
         .bind(id)
         .fetch_optional(pool)
@@ -124,12 +121,41 @@ pub async fn mark_processed(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Erro
     Ok(())
 }
 
-pub async fn count_articles(
-    pool: &SqlitePool,
-    query: &ArticleQuery,
-) -> Result<i64, sqlx::Error> {
+/// Bulk update processed_at for a batch of article IDs.
+/// Uses IN clause with chunked execution (100 per query) to avoid SQLite variable limits.
+pub async fn mark_processed_batch(pool: &SqlitePool, ids: &[i64]) -> Result<(), sqlx::Error> {
+    for chunk in ids.chunks(100) {
+        let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "UPDATE articles SET processed_at = datetime('now') WHERE id IN ({})",
+            placeholders
+        );
+        let mut query = sqlx::query(&sql);
+        for id in chunk {
+            query = query.bind(*id);
+        }
+        query.execute(pool).await?;
+    }
+    Ok(())
+}
+
+pub async fn count_articles(pool: &SqlitePool, query: &ArticleQuery) -> Result<i64, sqlx::Error> {
     let (where_clause, _) = build_article_filter(query);
     let sql = format!("SELECT COUNT(*) as count FROM articles{}", where_clause);
-    let row: (i64,) = sqlx::query_as(&sql).fetch_one(pool).await?;
-    Ok(row.0)
+
+    // Bind filter parameters same as list_articles
+    let count: (i64,) = if query.source_id.is_some() && query.processed.is_some() {
+        sqlx::query_as(&sql)
+            .bind(query.source_id.unwrap())
+            .bind(query.processed.unwrap())
+            .fetch_one(pool)
+            .await?
+    } else if let Some(source_id) = query.source_id {
+        sqlx::query_as(&sql).bind(source_id).fetch_one(pool).await?
+    } else if let Some(processed) = query.processed {
+        sqlx::query_as(&sql).bind(processed).fetch_one(pool).await?
+    } else {
+        sqlx::query_as(&sql).fetch_one(pool).await?
+    };
+    Ok(count.0)
 }

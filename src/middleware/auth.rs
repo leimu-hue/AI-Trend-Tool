@@ -27,11 +27,9 @@ pub async fn auth_middleware(
         .and_then(|value| value.to_str().ok())
         .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
-    let token_str = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| {
-            AppError::Unauthorized("Invalid Authorization format, expected Bearer".to_string())
-        })?;
+    let token_str = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        AppError::Unauthorized("Invalid Authorization format, expected Bearer".to_string())
+    })?;
 
     // 2. Query database for valid (non-revoked) token
     let token: ApiToken = db::token::get_token_by_value(&state.pool, token_str)

@@ -42,9 +42,7 @@ pub async fn insert_push_records_for_event(
     Ok(records)
 }
 
-pub async fn list_pending_records(
-    pool: &SqlitePool,
-) -> Result<Vec<PushRecord>, sqlx::Error> {
+pub async fn list_pending_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, sqlx::Error> {
     sqlx::query_as::<_, PushRecord>(
         "SELECT * FROM push_records WHERE status = 'pending' ORDER BY created_at ASC",
     )
@@ -52,9 +50,7 @@ pub async fn list_pending_records(
     .await
 }
 
-pub async fn list_retry_due_records(
-    pool: &SqlitePool,
-) -> Result<Vec<PushRecord>, sqlx::Error> {
+pub async fn list_retry_due_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, sqlx::Error> {
     sqlx::query_as::<_, PushRecord>(
         "SELECT * FROM push_records \
          WHERE status = 'failed' \
@@ -110,6 +106,38 @@ pub async fn update_push_status_optimistic(
     .await?;
 
     Ok(result.rows_affected() > 0)
+}
+
+/// Push record with channel name (for API response)
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct PushRecordWithChannel {
+    pub id: i64,
+    pub hot_event_id: i64,
+    pub channel_id: i64,
+    pub channel_name: String,
+    pub status: String,
+    pub retry_count: i32,
+    pub next_retry_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+/// List push records with channel names for a hot event
+pub async fn list_push_records_with_details(
+    pool: &SqlitePool,
+    hot_event_id: i64,
+) -> Result<Vec<PushRecordWithChannel>, sqlx::Error> {
+    sqlx::query_as::<_, PushRecordWithChannel>(
+        "SELECT pr.id, pr.hot_event_id, pr.channel_id, pc.name as channel_name, \
+         pr.status, pr.retry_count, pr.next_retry_at, pr.created_at, pr.updated_at \
+         FROM push_records pr \
+         JOIN push_channels pc ON pc.id = pr.channel_id \
+         WHERE pr.hot_event_id = ? \
+         ORDER BY pr.channel_id",
+    )
+    .bind(hot_event_id)
+    .fetch_all(pool)
+    .await
 }
 
 pub async fn get_push_records_by_hot_event(

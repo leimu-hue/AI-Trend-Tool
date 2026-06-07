@@ -18,21 +18,15 @@ pub async fn create_channel(
 }
 
 pub async fn list_channels(pool: &SqlitePool) -> Result<Vec<PushChannel>, sqlx::Error> {
-    sqlx::query_as::<_, PushChannel>(
-        "SELECT * FROM push_channels ORDER BY id",
-    )
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, PushChannel>("SELECT * FROM push_channels ORDER BY id")
+        .fetch_all(pool)
+        .await
 }
 
-pub async fn list_enabled_channels(
-    pool: &SqlitePool,
-) -> Result<Vec<PushChannel>, sqlx::Error> {
-    sqlx::query_as::<_, PushChannel>(
-        "SELECT * FROM push_channels WHERE enabled = 1",
-    )
-    .fetch_all(pool)
-    .await
+pub async fn list_enabled_channels(pool: &SqlitePool) -> Result<Vec<PushChannel>, sqlx::Error> {
+    sqlx::query_as::<_, PushChannel>("SELECT * FROM push_channels WHERE enabled = 1")
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn get_channel_by_id(

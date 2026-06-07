@@ -1,5 +1,6 @@
 // API handler module entry
-pub mod token;
-pub mod source;
-pub mod keyword;
 pub mod channel;
+pub mod keyword;
+pub mod query;
+pub mod source;
+pub mod token;

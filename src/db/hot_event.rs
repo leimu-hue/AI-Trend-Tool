@@ -41,12 +41,10 @@ pub async fn list_recent_hot_events(
     pool: &SqlitePool,
     limit: i64,
 ) -> Result<Vec<HotEvent>, sqlx::Error> {
-    sqlx::query_as::<_, HotEvent>(
-        "SELECT * FROM hot_events ORDER BY created_at DESC LIMIT ?",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, HotEvent>("SELECT * FROM hot_events ORDER BY created_at DESC LIMIT ?")
+        .bind(limit)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn get_hot_event_by_id(
@@ -57,6 +55,51 @@ pub async fn get_hot_event_by_id(
         .bind(id)
         .fetch_optional(pool)
         .await
+}
+
+/// Paginated hotspot listing with optional keyword_id filter
+pub async fn list_hotspots_paginated(
+    pool: &SqlitePool,
+    keyword_id: Option<i64>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<HotEvent>, sqlx::Error> {
+    if let Some(kid) = keyword_id {
+        sqlx::query_as::<_, HotEvent>(
+            "SELECT * FROM hot_events WHERE keyword_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(kid)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query_as::<_, HotEvent>(
+            "SELECT * FROM hot_events ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+    }
+}
+
+/// Count hotspots with optional keyword_id filter
+pub async fn count_hotspots(
+    pool: &SqlitePool,
+    keyword_id: Option<i64>,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = if let Some(kid) = keyword_id {
+        sqlx::query_as("SELECT COUNT(*) as count FROM hot_events WHERE keyword_id = ?")
+            .bind(kid)
+            .fetch_one(pool)
+            .await?
+    } else {
+        sqlx::query_as("SELECT COUNT(*) as count FROM hot_events")
+            .fetch_one(pool)
+            .await?
+    };
+    Ok(row.0)
 }
 
 /// Get hourly counts for a keyword over recent N hours (for burst detection)

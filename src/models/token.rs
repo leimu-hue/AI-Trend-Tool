@@ -42,4 +42,3 @@ pub struct CreateTokenRequest {
     pub name: String,
     pub expires_at: Option<NaiveDateTime>,
 }
-

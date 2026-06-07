@@ -8,7 +8,7 @@ use sqlx::SqlitePool;
 use tower_http::cors::CorsLayer;
 
 use crate::config::AppConfig;
-use crate::handlers::{channel, keyword, source, token};
+use crate::handlers::{channel, keyword, query, source, token};
 use crate::middleware::auth::auth_middleware;
 
 pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
@@ -38,10 +38,19 @@ pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
         .route("/channels", post(channel::create_channel))
         .route("/channels/{id}/update", post(channel::update_channel))
         .route("/channels/{id}/delete", post(channel::delete_channel))
-        // Query API (step 05)
-        // System control (step 05)
+        // Query API
+        .route("/articles", get(query::list_articles))
+        .route("/hotspots", get(query::list_hotspots))
+        .route("/hotspots/{id}/push-records", get(query::get_push_records))
+        .route("/trend/{keyword_id}", get(query::get_trend))
+        // System control
+        .route("/trigger/filter", post(query::trigger_filter))
+        .route("/trigger/pusher", post(query::trigger_pusher))
         .with_state(state.clone())
-        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
 
     Router::new()
         .route("/health", get(health_check))

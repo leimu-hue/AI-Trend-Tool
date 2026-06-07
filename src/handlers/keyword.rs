@@ -31,9 +31,7 @@ pub async fn create_keyword(
     let keyword: Keyword = db::keyword::create_keyword(&state.pool, &req)
         .await
         .map_err(|e| match e {
-            sqlx::Error::Database(ref db_err)
-                if db_err.message().contains("UNIQUE") =>
-            {
+            sqlx::Error::Database(ref db_err) if db_err.message().contains("UNIQUE") => {
                 AppError::Conflict(format!("Keyword '{}' already exists", req.word))
             }
             _ => AppError::from(e),

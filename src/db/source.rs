@@ -22,11 +22,9 @@ pub async fn create_source(
 }
 
 pub async fn list_sources(pool: &SqlitePool) -> Result<Vec<DataSource>, sqlx::Error> {
-    sqlx::query_as::<_, DataSource>(
-        "SELECT * FROM data_sources ORDER BY created_at DESC",
-    )
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, DataSource>("SELECT * FROM data_sources ORDER BY created_at DESC")
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn get_source_by_id(
@@ -100,10 +98,7 @@ pub async fn delete_source(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error
     Ok(())
 }
 
-pub async fn update_source_last_fetched(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<(), sqlx::Error> {
+pub async fn update_source_last_fetched(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE data_sources SET last_fetched_at = datetime('now') WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -113,13 +108,25 @@ pub async fn update_source_last_fetched(
 
 /// Reset last_fetched_at to NULL so the Parser picks up this source
 /// on its next polling cycle (used by manual fetch trigger).
-pub async fn reset_last_fetched(
-    pool: &SqlitePool,
-    id: i64,
-) -> Result<(), sqlx::Error> {
+pub async fn reset_last_fetched(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE data_sources SET last_fetched_at = NULL WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// List enabled sources that are due for fetching.
+/// A source is due when `last_fetched_at IS NULL` or the elapsed time
+/// since `last_fetched_at` exceeds its `interval_seconds`.
+pub async fn list_due_sources(pool: &SqlitePool) -> Result<Vec<DataSource>, sqlx::Error> {
+    sqlx::query_as::<_, DataSource>(
+        "SELECT * FROM data_sources \
+         WHERE enabled = 1 \
+         AND (last_fetched_at IS NULL \
+              OR (strftime('%s', 'now') - strftime('%s', last_fetched_at)) >= interval_seconds) \
+         ORDER BY last_fetched_at ASC NULLS FIRST",
+    )
+    .fetch_all(pool)
+    .await
 }

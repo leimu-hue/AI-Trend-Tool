@@ -1,5 +1,3 @@
-// Background service module entry.
-// Submodules for step 05:
-//   pub mod parser;
-//   pub mod filter;
-//   pub mod pusher;
+pub mod filter;
+pub mod parser;
+pub mod pusher;

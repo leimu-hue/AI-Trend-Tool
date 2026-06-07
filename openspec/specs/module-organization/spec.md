@@ -37,6 +37,7 @@ All multi-file Rust modules SHALL use the 2018 edition "non-mod.rs" convention. 
 - **THEN** the file `src/services.rs` SHALL exist as the module entry point
 - **THEN** the directory `src/services/` SHALL exist for submodule files
 - **THEN** no file at `src/services/mod.rs` SHALL exist
+- **THEN** `src/services.rs` SHALL contain `pub mod parser;`, `pub mod filter;`, and `pub mod pusher;`
 
 ### Requirement: CLAUDE.md documents the convention
 
