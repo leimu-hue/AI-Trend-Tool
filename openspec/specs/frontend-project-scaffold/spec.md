@@ -1,14 +1,20 @@
-## ADDED Requirements
+# Frontend Project Scaffold
+
+## Purpose
+
+Initialize the Electron + Vite + React 19 + TypeScript desktop application project, with React Compiler for automatic memoization and secure Electron defaults.
+
+## Requirements
 
 ### Requirement: Electron + Vite + React 19 project scaffold
 The system SHALL provide a working Electron desktop application project at `web/` using Vite as the bundler, React 19 with TypeScript, and `electron-vite` for unified main/preload/renderer build configuration.
 
 #### Scenario: Project compiles without errors
-- **WHEN** user runs `cd frontend && npm install && npm run dev`
+- **WHEN** user runs `cd web && npm install && npm run dev`
 - **THEN** the Electron window opens displaying the React application without TypeScript or build errors
 
 #### Scenario: Production build succeeds
-- **WHEN** user runs `cd frontend && npm run build`
+- **WHEN** user runs `cd web && npm run build`
 - **THEN** the project produces distributable Electron application files in `web/dist/`
 
 #### Scenario: React Compiler auto-memoizes
@@ -81,7 +87,7 @@ The system SHALL provide reusable components for loading, empty states, error bo
 
 #### Scenario: Loading component renders spinning indicator
 - **WHEN** `Loading` component is rendered
-- **THEN** a `.live-dot` animated indicator and "加载中..." text are displayed, optionally full-page when `fullPage` prop is true
+- **THEN** an antd `Spin` component with "加载中..." text is displayed, optionally full-page when `fullPage` prop is true
 
 #### Scenario: Empty component shows message and optional action
 - **WHEN** `Empty` component is rendered with `description="暂无数据源"` and `actionText="添加数据源"`

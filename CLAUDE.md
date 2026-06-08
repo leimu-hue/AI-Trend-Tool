@@ -50,8 +50,8 @@ cargo run -- pusher    # Pusher only
 cargo sqlx migrate run
 
 # Frontend
-cd frontend && npm run dev      # dev server
-cd frontend && npm run build    # production build
+cd web && npm run dev      # dev server
+cd web && npm run build    # production build
 
 # Production backend build
 cargo build --release

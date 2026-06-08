@@ -16,8 +16,8 @@
 - [x] 2.2 Create `src/theme/config.tsx` — `ConfigProvider` wrapper with `theme.darkAlgorithm` + custom token overrides from tokens.ts
 - [x] 2.3 Configure Tailwind CSS v4: define `@theme` block in `src/styles/index.css` with `--color-*`, `--font-family-*`, `--radius-*` CSS custom properties mapped from prototype tokens; register `@tailwindcss/vite` plugin in `electron.vite.config.ts`
 - [x] 2.4 Create `src/styles/index.css` — Tailwind directives (`@tailwind base/components/utilities`) + minimal reset override for Electron quirks
-- [ ] 2.5 Verify dark theme: render a test page with antd Button, Card, Table, Tag, Modal — colors match prototype `var(--bg)`, `var(--surface)`, `var(--fg)`, `var(--border)`
-- [ ] 2.6 Verify Tailwind utilities: `bg-bg`, `text-fg`, `text-muted`, `border-border`, `font-display`, `font-mono`, `rounded-md`, `rounded-lg` classes produce correct prototype values
+- [x] 2.5 Verify dark theme: render a test page with antd Button, Card, Table, Tag, Modal — colors match prototype `var(--bg)`, `var(--surface)`, `var(--fg)`, `var(--border)`
+- [x] 2.6 Verify Tailwind utilities: `bg-bg`, `text-fg`, `text-muted`, `border-border`, `font-display`, `font-mono`, `rounded-md`, `rounded-lg` classes produce correct prototype values
 - [x] 2.7 Ensure antd ConfigProvider wraps the entire app in `main.tsx` (above Router)
 
 ## 3. API Client Layer
@@ -71,9 +71,9 @@
 ## 8. Verification
 
 - [x] 8.1 Run `npm run dev` — Electron window opens, redirects to `/auth`
-- [ ] 8.2 Enter valid API token — navigates to `/dashboard`, sidebar + topbar render correctly
-- [ ] 8.3 Navigate all sidebar links — each stub page renders with correct page title in topbar
-- [ ] 8.4 Test responsive: resize to ≤768px — sidebar collapses, hamburger menu works
-- [ ] 8.5 Test 401: use invalid/expired token — redirected to `/auth` with error clearing
+- [x] 8.2 Enter valid API token — navigates to `/dashboard`, sidebar + topbar render correctly
+- [x] 8.3 Navigate all sidebar links — each stub page renders with correct page title in topbar
+- [x] 8.4 Test responsive: resize to ≤768px — sidebar collapses, hamburger menu works
+- [x] 8.5 Test 401: use invalid/expired token — redirected to `/auth` with error clearing
 - [x] 8.6 Run `npm run build` — production build succeeds without errors
 - [x] 8.7 Verify React Compiler: `npm run build` includes React Compiler transform (no compiler errors)
