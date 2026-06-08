@@ -111,65 +111,76 @@ src/
 │   └── index.css       # Tailwind directives (@tailwind base/components/utilities) + minimal reset overrides
 ```
 
-**Tailwind config** maps prototype design tokens:
-```js
-// tailwind.config.ts — prototype tokens as Tailwind extensions
-{
-  theme: {
-    extend: {
-      colors: {
-        bg: '#161412',
-        surface: '#1f1d1b',
-        fg: '#faf9f6',
-        'fg-2': '#afaeac',
-        muted: '#868584',
-        meta: '#666469',
-        border: 'rgba(226, 226, 226, 0.35)',
-        accent: '#353534',
-        'accent-on': '#afaeac',
-        'accent-hover': '#454545',
-        success: '#16a34a',
-        warn: '#eab308',
-        danger: '#dc2626',
-      },
-      fontFamily: {
-        display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        body: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['ui-monospace', 'SF Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
-      },
-      borderRadius: {
-        sm: '6px',
-        md: '12px',
-        lg: '14px',
-        pill: '9999px',
-      },
-    },
-  },
+**Tailwind v4 CSS-based config** maps prototype design tokens via `@theme` in `src/styles/index.css`:
+```css
+/* src/styles/index.css — prototype tokens as Tailwind v4 @theme */
+@import 'tailwindcss/utilities';
+@import 'tailwindcss/theme' layer(theme);
+
+@theme {
+  --color-bg: #161412;
+  --color-surface: #1f1d1b;
+  --color-fg: #faf9f6;
+  --color-fg-2: #afaeac;
+  --color-muted: #868584;
+  --color-meta: #666469;
+  --color-border: rgba(226, 226, 226, 0.35);
+  --color-accent: #353534;
+  --color-accent-on: #afaeac;
+  --color-accent-hover: #454545;
+  --color-success: #16a34a;
+  --color-warn: #eab308;
+  --color-danger: #dc2626;
+  --font-family-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-family-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
 }
 ```
 
-Ant Design theme token overrides map prototype colors into antd's token system:
+Tailwind v4 removes the need for a JS config file — `@theme` defines design tokens directly in CSS. No `preflight: false` needed (v4 dropped the aggressive reset). The `@tailwindcss/vite` plugin handles processing.
+
+Ant Design theme token overrides map prototype colors into antd's token system. Tokens reference Tailwind v4 `@theme` CSS custom properties via `var()` instead of hardcoded hex values. This allows antd's cssinjs output to resolve against the same `@theme` block defined in `index.css`, keeping antd components and Tailwind utilities in sync from a single source of truth:
+
 ```ts
-// theme/tokens.ts — prototype → antd token mapping
+// theme/tokens.ts — prototype → antd token mapping (CSS variable references)
 import type { ThemeConfig } from 'antd';
 
-export const themeConfig: ThemeConfig = {
-  algorithm: theme.darkAlgorithm,
+export const themeTokens: ThemeConfig = {
   token: {
-    colorBgBase: '#161412',        // --bg
-    colorBgContainer: '#1f1d1b',   // --surface
-    colorText: '#faf9f6',          // --fg
-    colorTextSecondary: '#afaeac', // --fg-2
-    colorTextTertiary: '#868584',  // --muted
-    colorBorder: 'rgba(226, 226, 226, 0.35)', // --border
-    colorPrimary: '#afaeac',       // --accent-on
-    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    borderRadius: 12,              // --radius-md
-    borderRadiusLG: 14,            // --radius-lg
-    borderRadiusSM: 6,             // --radius-sm
+    colorBgBase: 'var(--color-bg)',
+    colorBgContainer: 'var(--color-surface)',
+    colorBgElevated: 'var(--color-surface)',
+    colorText: 'var(--color-fg)',
+    colorTextSecondary: 'var(--color-fg-2)',
+    colorTextTertiary: 'var(--color-muted)',
+    colorTextQuaternary: 'var(--color-meta)',
+    colorBorder: 'var(--color-border)',
+    colorBorderSecondary: 'var(--color-border)',
+    colorPrimary: 'var(--color-accent-on)',
+    colorPrimaryBg: 'var(--color-accent)',
+    colorPrimaryBgHover: 'var(--color-accent-hover)',
+    colorSuccess: 'var(--color-success)',
+    colorWarning: 'var(--color-warn)',
+    colorError: 'var(--color-danger)',
+    fontFamily: 'var(--font-family-body)',
+    fontSize: 14,
+    borderRadius: 12,
+    borderRadiusLG: 14,
+    borderRadiusSM: 6,
+    borderRadiusXS: 4,
+    controlHeight: 36,
+    lineHeight: 1.5,
+    colorLink: 'var(--color-accent-on)',
+    colorLinkHover: 'var(--color-fg)',
   },
 };
 ```
+
+The `@theme` block in `src/styles/index.css` remains the single source of truth for all design token values. antd's cssinjs emits these `var()` references as-is into generated CSS, where the browser resolves them from `:root`-scoped custom properties defined by Tailwind.
 
 ### D5: Token Storage → localStorage
 
@@ -201,13 +212,15 @@ export const themeConfig: ThemeConfig = {
 
 `ProtectedRoute` checks `localStorage.getItem('api_token')` — redirects to `/auth` if missing. No token validation on mount (the API interceptor handles 401).
 
-### D7: Toast / Notifications → antd `message` API
+**Note:** Electron uses `HashRouter` instead of `BrowserRouter` because `file://` protocol does not support HTML5 history API (`pushState`/`replaceState`). Routes become `#/auth`, `#/dashboard`, etc. — functionally identical, only the URL format differs.
 
-**Choice:** Use antd's built-in `message` API for toast notifications (via `App.useApp()` or static `message.success/error/info`).
+### D7: Toast / Notifications → antd `notification` API
+
+**Choice:** Use antd's built-in `notification` API for toast notifications (via `App.useApp()` or static `notification.success/error/info`).
 
 **Rationale:**
+- `notification` supports `placement` control (`bottomRight`) — matches prototype toast position better than `message` (which only does top)
 - antd already ships with a dark-theme-aware notification system — no need for custom Toast context
-- `message.success(msg)`, `message.error(msg)` match prototype toast behavior with 2-3s auto-dismiss
 - `App.useApp()` pattern (antd 5 recommended) gives access to `message`, `modal`, `notification` instances that respect ConfigProvider theme
 - Eliminates custom `ToastProvider` + `useToast` code entirely
 
@@ -217,16 +230,19 @@ export const themeConfig: ThemeConfig = {
 import { App } from 'antd';
 
 export function useMessage() {
-  const { message } = App.useApp();
+  const { notification } = App.useApp();
+  const notify = (type: 'success' | 'error' | 'info', msg: string, duration: number) => {
+    notification[type]({ message: msg, placement: 'bottomRight', duration, closeIcon: false });
+  };
   return {
-    success: (msg: string) => message.success(msg, 2),
-    error: (msg: string) => message.error(msg, 3),
-    info: (msg: string) => message.info(msg, 2),
+    success: (msg: string) => notify('success', msg, 2),
+    error: (msg: string) => notify('error', msg, 3),
+    info: (msg: string) => notify('info', msg, 2),
   };
 }
 ```
 
-The API client's response interceptor also uses `App.useApp()` message — or falls back to static import for non-component usage (`message.error(msg)` outside React tree). For the interceptor (which runs outside React), static `message` import from `antd` works since antd 5 holds a singleton.
+The API client's response interceptor runs outside the React tree — it uses static `notification` import from `antd` directly, which works since antd 5 holds a singleton.
 
 ### D8: UI Design Taste Guardrails
 

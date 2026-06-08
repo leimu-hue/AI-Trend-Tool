@@ -1,20 +1,76 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  语言：中文（简体）
+  所有产出物必须用简体中文撰写。
+  ## Project Overview
+  AI Trend Monitor (AI热点监控) — a full-stack desktop application for monitoring AI industry trends.
+  It aggregates articles from RSS sources, filters them by keywords, detects hot events,
+  and pushes alerts to configured webhook channels.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  ## Architecture
+  - **Backend**: Rust monolith with Axum web framework, runs as API server + background workers
+  - **Frontend**: Electron desktop app wrapping a React SPA (renderer)
+  - **Database**: SQLite via SQLx with file-based migrations
+  - **Deployment**: Multi-stage Docker build (rust:1.83-slim → debian:bookworm-slim)
+
+  ## Backend Tech Stack (Rust)
+  - Web: axum 0.8, tower-http (CORS, tracing), tokio (async runtime)
+  - Database: sqlx 0.7 (SQLite, compile-time checked queries, migrations)
+  - Serialization: serde, serde_json, toml
+  - RSS parsing: feed-rs
+  - Keyword matching: aho-corasick
+  - HTTP client: reqwest (webhook push)
+  - Logging: tracing + tracing-subscriber
+  - CLI: clap (derive mode)
+  - Token auth: rand + hex for token generation
+
+  ## Backend Conventions
+  - Module layout: `db/` (queries) → `models/` (structs) → `handlers/` (HTTP) → `services/` (background tasks)
+  - Error handling: unified `AppError` enum with `IntoResponse`, auto-converts `sqlx::Error`
+  - API responses: `ApiResponse::ok()` / `created()` / `no_content()` wrappers, JSON format `{ "data": ... }`
+  - Error responses: `{ "error": { "code": "...", "message": "..." } }`
+  - API prefix: `/api/v1`, auth via Bearer token middleware on all API routes except `/health`
+  - Configuration: TOML file (`config.toml`), loaded via clap CLI arg
+  - Background modes: `all` (API + parser + filter + pusher), `api`, `parser`, `filter`, `pusher`
+
+  ## Frontend Tech Stack (Electron + React)
+  - Framework: Electron 33, electron-vite, React 19, TypeScript 5.6
+  - UI: Ant Design 5, @ant-design/icons
+  - Styling: Tailwind CSS 4
+  - Charts: ECharts 5 (echarts-for-react)
+  - Routing: react-router-dom 7
+  - HTTP: axios
+  - Build: electron-vite, electron-builder (NSIS for Windows, DMG for macOS, AppImage for Linux)
+
+  ## Frontend Conventions
+  - Structure: `pages/` (route components) → `components/` (shared UI) → `api/` (HTTP client layer) → `hooks/` (custom hooks) → `theme/` (design tokens)
+  - API layer: typed client per resource (channels.ts, keywords.ts, sources.ts, etc.)
+  - Auth: token-based, stored in renderer, ProtectedRoute guard component
+
+  ## Database
+  - Engine: SQLite (file-based, WAL mode)
+  - Migrations: SQL files in `docs/migrations/`, auto-run on startup via `sqlx::migrate!`
+  - Key tables: articles, hot_events, keywords, keyword_mentions, sources, channels, push_records, api_tokens
+
+  ## General Conventions
+  - Rust edition: 2021
+  - API style: RESTful, JSON request/response
+  - Spec-driven development using OpenSpec workflow
+  - All API mutations use POST method (not PUT/PATCH/DELETE)
+  - Path params use `{id}` syntax in route definitions
+
+rules:
+  proposal:
+    - Always include a "Non-goals" section
+    - Reference existing module names from the backend (db, models, handlers, services)
+    - Consider both backend API changes and frontend UI impacts
+  spec:
+    - Use Rust type signatures for data models
+    - Include SQL migration snippets for schema changes
+    - Define API endpoints with HTTP method, path, request body, and response body
+  tasks:
+    - Break tasks into chunks of max 2 hours
+    - Backend tasks should reference specific module files (e.g., src/handlers/channel.rs)
+    - Frontend tasks should reference specific component files (e.g., web/src/renderer/src/pages/)
+    - Include a verification step (cargo build, cargo test, or manual check) after each implementation task

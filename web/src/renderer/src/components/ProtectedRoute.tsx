@@ -1,0 +1,9 @@
+import { Navigate, Outlet } from 'react-router-dom'
+
+export default function ProtectedRoute() {
+  const token = localStorage.getItem('api_token')
+  if (!token) {
+    return <Navigate to="/auth" replace />
+  }
+  return <Outlet />
+}

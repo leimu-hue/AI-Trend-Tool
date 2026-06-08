@@ -19,21 +19,6 @@ The system SHALL provide a working Electron desktop application project at `web/
 - **WHEN** the Electron main process creates a BrowserWindow
 - **THEN** `nodeIntegration` SHALL be `false`, `contextIsolation` SHALL be `true`, and `sandbox` SHALL be `true`
 
-### Requirement: Design token CSS system
-The system SHALL provide CSS custom properties (design tokens) in `src/styles/tokens.css` extracted from `docs/Live-Artifact/index.html`, including colors, fonts, font sizes, border radii, shadows, motion curves, layout widths, and spacing scale.
-
-#### Scenario: All prototype colors available as CSS variables
-- **WHEN** a component uses `var(--bg)`, `var(--surface)`, `var(--fg)`, `var(--accent)`, `var(--danger)`, `var(--success)`, or `var(--warn)`
-- **THEN** the correct prototype color value is applied
-
-#### Scenario: Font scale matches prototype
-- **WHEN** a component uses `var(--text-xs)` through `var(--text-2xl)`
-- **THEN** the font sizes match `12px`, `14px`, `18px`, `24px`, `32px`, `48px` respectively
-
-#### Scenario: Global CSS provides base component classes
-- **WHEN** `global.css` is loaded
-- **THEN** `.btn`, `.btn-primary`, `.btn-ghost`, `.btn-danger`, `.panel`, `.panel-header`, `table`, `.badge`, `.badge-success`, `.badge-warn`, `.badge-danger`, `.modal`, `.modal-overlay`, `.field`, `.toast`, and `.truncate` classes are available with prototype-matching styles
-
 ### Requirement: API client with token interceptors
 The system SHALL provide an Axios instance in `src/api/client.ts` that automatically attaches the Bearer token from localStorage to all requests and handles 401 responses by clearing the token and redirecting to `/auth`.
 
@@ -107,5 +92,5 @@ The system SHALL provide reusable components for loading, empty states, error bo
 - **THEN** the ErrorBoundary displays "页面出错了" with the error message and a "刷新页面" button that reloads the page
 
 #### Scenario: Toast notification appears and auto-dismisses
-- **WHEN** `showToast("操作成功")` is called
-- **THEN** a toast notification appears at the bottom-right corner displaying "操作成功" and automatically disappears after 2 seconds
+- **WHEN** `showMessage.success("操作成功")` is called
+- **THEN** a toast notification appears at bottom-right displaying "操作成功" and automatically disappears after 2 seconds

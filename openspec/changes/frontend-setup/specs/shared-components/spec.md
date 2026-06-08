@@ -37,17 +37,17 @@ The system SHALL provide an `ErrorBoundary` class component that catches JavaScr
 - **WHEN** the ErrorBoundary catches an error
 - **THEN** the error and component stack SHALL be logged via `console.error`
 
-### Requirement: Message notification hook
-The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().message` for type-safe notification calls.
+### Requirement: Notification hook
+The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().notification` for type-safe notification calls with bottom-right placement.
 
-#### Scenario: Success message
+#### Scenario: Success notification
 - **WHEN** `showMessage.success("保存成功")` is called from a component within `<App>`
-- **THEN** a dark-themed success notification appears at the top-center and auto-dismisses after 2 seconds
+- **THEN** a dark-themed success notification appears at bottom-right and auto-dismisses after 2 seconds
 
-#### Scenario: Error message
+#### Scenario: Error notification
 - **WHEN** `showMessage.error("操作失败")` is called
-- **THEN** a dark-themed error notification appears at the top-center and auto-dismisses after 3 seconds
+- **THEN** a dark-themed error notification appears at bottom-right and auto-dismisses after 3 seconds
 
-#### Scenario: Info message
+#### Scenario: Info notification
 - **WHEN** `showMessage.info("提示信息")` is called
-- **THEN** a dark-themed info notification appears and auto-dismisses after 2 seconds
+- **THEN** a dark-themed info notification appears at bottom-right and auto-dismisses after 2 seconds

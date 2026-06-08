@@ -24,13 +24,13 @@ rustc-ice-*.txt
 #.idea/
 
 # 依赖目录
-/node_modules
-/.pnp
+node_modules/
+.pnp/
 pnp.js
 # 构建输出
-/dist
-/build
-/out
+dist/
+build/
+out/
 # 编辑器配置
 /.vscode
 /.idea
