@@ -39,11 +39,11 @@ reqwest = { version = "0.12", features = ["json"] }
 rand = "0.8"
 hex = "0.4"
 
-# CLI argument parsing
-clap = { version = "4", features = ["derive"] }
-
 # Async trait (extensible parser)
 async-trait = "0.1"
+
+# Cancellation token for graceful shutdown
+tokio-util = "0.7"
 
 # ─── Profile: Release (production build) ───
 [profile.release]

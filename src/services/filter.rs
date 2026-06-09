@@ -2,27 +2,32 @@ use aho_corasick::AhoCorasickBuilder;
 use chrono::Utc;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use tokio::sync::mpsc;
 
 use crate::config::FilterConfig;
 use crate::db;
+use crate::pipeline::{Pipeline, PipelineEvent};
 
 /// Run one filter iteration: load unprocessed articles, match keywords,
 /// detect hotspots via burst detection, create push records, mark processed.
 ///
+/// Returns `true` if at least one new push record was created, so the caller
+/// can signal downstream modules.
+///
 /// Shared by the background loop and manual trigger endpoint.
-pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
+pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     // 1. Load unprocessed articles
     let articles = match db::article::get_unprocessed_articles(pool, config.batch_size as i64).await
     {
         Ok(articles) => articles,
         Err(e) => {
             tracing::error!("Filter: failed to load unprocessed articles: {}", e);
-            return;
+            return false;
         }
     };
 
     if articles.is_empty() {
-        return;
+        return false;
     }
 
     tracing::info!("Filter: loaded {} unprocessed article(s)", articles.len());
@@ -32,7 +37,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
         Ok(kws) => kws,
         Err(e) => {
             tracing::error!("Filter: failed to load keywords: {}", e);
-            return;
+            return false;
         }
     };
 
@@ -42,7 +47,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
         if let Err(e) = db::article::mark_processed_batch(pool, &ids).await {
             tracing::error!("Filter: failed to mark articles processed: {}", e);
         }
-        return;
+        return false;
     }
 
     // 3. Build Aho-Corasick automata
@@ -133,9 +138,11 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
         Ok(chs) => chs,
         Err(e) => {
             tracing::error!("Filter: failed to load channels: {}", e);
-            return;
+            return false;
         }
     };
+
+    let mut created_push = false;
 
     for kw in &keywords {
         let current_count = *hourly_counts.get(&kw.id).unwrap_or(&0);
@@ -188,15 +195,17 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
             );
 
             let channel_ids: Vec<i64> = enabled_channels.iter().map(|c| c.id).collect();
-            if let Err(e) =
-                db::push_record::insert_push_records_for_event(pool, hot_event.id, &channel_ids)
-                    .await
+            match db::push_record::insert_push_records_for_event(pool, hot_event.id, &channel_ids)
+                .await
             {
-                tracing::error!(
-                    "Filter: failed to insert push_records for hot_event {}: {}",
-                    hot_event.id,
-                    e
-                );
+                Ok(_) => created_push = true,
+                Err(e) => {
+                    tracing::error!(
+                        "Filter: failed to insert push_records for hot_event {}: {}",
+                        hot_event.id,
+                        e
+                    );
+                }
             }
         }
     }
@@ -205,6 +214,8 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) {
     if let Err(e) = db::article::mark_processed_batch(pool, &article_ids).await {
         tracing::error!("Filter: failed to mark articles processed: {}", e);
     }
+
+    created_push
 }
 
 /// Compute historical mean and stddev from hot_events hourly counts
@@ -266,11 +277,33 @@ async fn upsert_hot_event_record(
     .await
 }
 
-/// Background filter loop — runs `run_filter_once` on a configurable interval.
-pub async fn start_filter_loop(pool: SqlitePool, config: FilterConfig) {
-    let interval = std::time::Duration::from_secs(config.interval_seconds);
+/// Background filter loop — runs `run_filter_once` on a configurable interval,
+/// or immediately when the Parser signals new articles via `articles_rx`.
+pub async fn start_filter_loop(
+    pool: SqlitePool,
+    config: FilterConfig,
+    pipeline: Pipeline,
+    mut articles_rx: mpsc::Receiver<PipelineEvent>,
+) {
+    let mut interval =
+        tokio::time::interval(std::time::Duration::from_secs(config.interval_seconds));
+
     loop {
-        tokio::time::sleep(interval).await;
-        run_filter_once(&pool, &config).await;
+        tokio::select! {
+            _ = pipeline.cancel.cancelled() => {
+                tracing::info!("Filter: shutting down gracefully");
+                break;
+            }
+            _ = interval.tick() => {
+                if run_filter_once(&pool, &config).await {
+                    let _ = pipeline.push_ready_tx.try_send(PipelineEvent::NewData);
+                }
+            }
+            Some(_) = articles_rx.recv() => {
+                if run_filter_once(&pool, &config).await {
+                    let _ = pipeline.push_ready_tx.try_send(PipelineEvent::NewData);
+                }
+            }
+        }
     }
 }

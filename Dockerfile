@@ -55,6 +55,6 @@ EXPOSE 3000
 # Volume for persistent SQLite data
 VOLUME ["/app/docs/data"]
 
-# Run in "all" mode by default
+# Run all modules + API server (no mode argument needed)
 ENTRYPOINT ["./trend-monitor"]
-CMD ["--config", "config.toml", "all"]
+CMD ["config.toml"]

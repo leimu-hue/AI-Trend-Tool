@@ -37,16 +37,6 @@ pub async fn get_keyword_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Keyw
         .await
 }
 
-pub async fn get_keyword_by_word(
-    pool: &SqlitePool,
-    word: &str,
-) -> Result<Option<Keyword>, sqlx::Error> {
-    sqlx::query_as::<_, Keyword>("SELECT * FROM keywords WHERE word = ?")
-        .bind(word)
-        .fetch_optional(pool)
-        .await
-}
-
 pub async fn update_keyword(
     pool: &SqlitePool,
     id: i64,

@@ -9,6 +9,7 @@ use serde_json::json;
 use crate::db;
 use crate::error::{ApiResponse, AppError};
 use crate::models::article::ArticleQuery;
+use crate::pipeline::PipelineEvent;
 use crate::routes::AppState;
 
 /// Generic paginated response wrapper
@@ -151,7 +152,14 @@ pub async fn get_trend(
 pub async fn trigger_filter(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    crate::services::filter::run_filter_once(&state.pool, &state.config.filter).await;
+    let created_push =
+        crate::services::filter::run_filter_once(&state.pool, &state.config.filter).await;
+    if created_push {
+        let _ = state
+            .pipeline
+            .push_ready_tx
+            .try_send(PipelineEvent::NewData);
+    }
     Ok(ApiResponse::ok(json!({"message": "Filter executed"})))
 }
 

@@ -13,6 +13,7 @@ initial_token = "optional-initial-token"
 max_concurrent_fetches = 10
 default_user_agent = "HotspotMonitor/1.0"
 default_timeout_seconds = 30
+interval_seconds = 30
 
 [filter]
 batch_size = 1000

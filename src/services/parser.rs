@@ -7,6 +7,7 @@ use tokio::sync::Semaphore;
 use crate::config::ParserConfig;
 use crate::db;
 use crate::models::source::DataSource;
+use crate::pipeline::{Pipeline, PipelineEvent};
 
 /// A parsed article extracted from a feed
 #[derive(Debug, Clone)]
@@ -89,14 +90,23 @@ impl Parser for RssParser {
 
 /// Background parser loop.
 ///
-/// Every 30 seconds, queries due sources and spawns concurrent fetch tasks
-/// limited by `config.parser.max_concurrent_fetches`.
-pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig) {
+/// Uses `tokio::select!` to listen for cancellation while periodically
+/// querying due sources at the configured `interval_seconds`.
+/// Spawns concurrent fetch tasks limited by `config.parser.max_concurrent_fetches`.
+pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig, pipeline: Pipeline) {
     let parser = Arc::new(RssParser::new(&config));
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent_fetches));
+    let mut interval =
+        tokio::time::interval(std::time::Duration::from_secs(config.interval_seconds));
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        tokio::select! {
+            _ = pipeline.cancel.cancelled() => {
+                tracing::info!("Parser: shutting down gracefully");
+                break;
+            }
+            _ = interval.tick() => {}
+        }
 
         let due_sources = match db::source::list_due_sources(&pool).await {
             Ok(sources) => sources,
@@ -116,6 +126,7 @@ pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig) {
             let pool = pool.clone();
             let parser = Arc::clone(&parser);
             let permit = Arc::clone(&semaphore);
+            let pipeline = pipeline.clone();
 
             tokio::spawn(async move {
                 let _permit = permit.acquire().await;
@@ -158,6 +169,10 @@ pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig) {
                                 source.id,
                                 e
                             );
+                        }
+                        // Notify Filter that new articles are available
+                        if inserted > 0 {
+                            let _ = pipeline.articles_ready_tx.try_send(PipelineEvent::NewData);
                         }
                         tracing::info!(
                             "Parser: source {} '{}' — {} inserted, {} skipped (dup)",

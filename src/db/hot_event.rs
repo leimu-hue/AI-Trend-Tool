@@ -23,30 +23,6 @@ pub async fn insert_hot_event(
     .await
 }
 
-pub async fn list_hot_events_by_keyword(
-    pool: &SqlitePool,
-    keyword_id: i64,
-    limit: i64,
-) -> Result<Vec<HotEvent>, sqlx::Error> {
-    sqlx::query_as::<_, HotEvent>(
-        "SELECT * FROM hot_events WHERE keyword_id = ? ORDER BY created_at DESC LIMIT ?",
-    )
-    .bind(keyword_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn list_recent_hot_events(
-    pool: &SqlitePool,
-    limit: i64,
-) -> Result<Vec<HotEvent>, sqlx::Error> {
-    sqlx::query_as::<_, HotEvent>("SELECT * FROM hot_events ORDER BY created_at DESC LIMIT ?")
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-}
-
 pub async fn get_hot_event_by_id(
     pool: &SqlitePool,
     id: i64,

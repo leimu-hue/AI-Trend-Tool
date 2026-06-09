@@ -42,35 +42,39 @@ pub async fn list_articles(
         where_clause
     );
 
-    // Use simple query since dynamic clauses are minimal for articles
-    if query.source_id.is_some() && query.processed.is_some() {
-        sqlx::query_as::<_, Article>(&sql)
-            .bind(query.source_id.unwrap())
-            .bind(query.processed.unwrap())
-            .bind(per_page as i64)
-            .bind(offset as i64)
-            .fetch_all(pool)
-            .await
-    } else if let Some(source_id) = query.source_id {
-        sqlx::query_as::<_, Article>(&sql)
-            .bind(source_id)
-            .bind(per_page as i64)
-            .bind(offset as i64)
-            .fetch_all(pool)
-            .await
-    } else if let Some(processed) = query.processed {
-        sqlx::query_as::<_, Article>(&sql)
-            .bind(processed)
-            .bind(per_page as i64)
-            .bind(offset as i64)
-            .fetch_all(pool)
-            .await
-    } else {
-        sqlx::query_as::<_, Article>(&sql)
-            .bind(per_page as i64)
-            .bind(offset as i64)
-            .fetch_all(pool)
-            .await
+    match (query.source_id, query.processed) {
+        (Some(source_id), Some(processed)) => {
+            sqlx::query_as::<_, Article>(&sql)
+                .bind(source_id)
+                .bind(processed)
+                .bind(per_page as i64)
+                .bind(offset as i64)
+                .fetch_all(pool)
+                .await
+        }
+        (Some(source_id), None) => {
+            sqlx::query_as::<_, Article>(&sql)
+                .bind(source_id)
+                .bind(per_page as i64)
+                .bind(offset as i64)
+                .fetch_all(pool)
+                .await
+        }
+        (None, Some(processed)) => {
+            sqlx::query_as::<_, Article>(&sql)
+                .bind(processed)
+                .bind(per_page as i64)
+                .bind(offset as i64)
+                .fetch_all(pool)
+                .await
+        }
+        (None, None) => {
+            sqlx::query_as::<_, Article>(&sql)
+                .bind(per_page as i64)
+                .bind(offset as i64)
+                .fetch_all(pool)
+                .await
+        }
     }
 }
 
@@ -94,13 +98,6 @@ fn build_article_filter(query: &ArticleQuery) -> (String, Vec<(String, String)>)
     (where_clause, vec![])
 }
 
-pub async fn get_article_by_id(pool: &SqlitePool, id: i64) -> Result<Option<Article>, sqlx::Error> {
-    sqlx::query_as::<_, Article>("SELECT * FROM articles WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-}
-
 pub async fn get_unprocessed_articles(
     pool: &SqlitePool,
     limit: i64,
@@ -111,14 +108,6 @@ pub async fn get_unprocessed_articles(
     .bind(limit)
     .fetch_all(pool)
     .await
-}
-
-pub async fn mark_processed(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE articles SET processed_at = datetime('now') WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
 }
 
 /// Bulk update processed_at for a batch of article IDs.
@@ -143,19 +132,17 @@ pub async fn count_articles(pool: &SqlitePool, query: &ArticleQuery) -> Result<i
     let (where_clause, _) = build_article_filter(query);
     let sql = format!("SELECT COUNT(*) as count FROM articles{}", where_clause);
 
-    // Bind filter parameters same as list_articles
-    let count: (i64,) = if query.source_id.is_some() && query.processed.is_some() {
-        sqlx::query_as(&sql)
-            .bind(query.source_id.unwrap())
-            .bind(query.processed.unwrap())
-            .fetch_one(pool)
-            .await?
-    } else if let Some(source_id) = query.source_id {
-        sqlx::query_as(&sql).bind(source_id).fetch_one(pool).await?
-    } else if let Some(processed) = query.processed {
-        sqlx::query_as(&sql).bind(processed).fetch_one(pool).await?
-    } else {
-        sqlx::query_as(&sql).fetch_one(pool).await?
+    let count: (i64,) = match (query.source_id, query.processed) {
+        (Some(source_id), Some(processed)) => {
+            sqlx::query_as(&sql)
+                .bind(source_id)
+                .bind(processed)
+                .fetch_one(pool)
+                .await?
+        }
+        (Some(source_id), None) => sqlx::query_as(&sql).bind(source_id).fetch_one(pool).await?,
+        (None, Some(processed)) => sqlx::query_as(&sql).bind(processed).fetch_one(pool).await?,
+        (None, None) => sqlx::query_as(&sql).fetch_one(pool).await?,
     };
     Ok(count.0)
 }

@@ -26,11 +26,17 @@ pub struct AuthConfig {
     pub initial_token: Option<String>,
 }
 
+fn default_interval() -> u64 {
+    30
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ParserConfig {
     pub max_concurrent_fetches: usize,
     pub default_user_agent: String,
     pub default_timeout_seconds: u64,
+    #[serde(default = "default_interval")]
+    pub interval_seconds: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

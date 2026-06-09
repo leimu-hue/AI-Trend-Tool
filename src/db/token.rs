@@ -88,11 +88,3 @@ pub async fn insert_initial_token(
         .await?;
     Ok(())
 }
-
-pub async fn delete_token(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM api_tokens WHERE id = ?")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}

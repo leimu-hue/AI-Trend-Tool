@@ -4,25 +4,16 @@ mod error;
 mod handlers;
 mod middleware;
 mod models;
+mod pipeline;
 mod routes;
 mod services;
 
-use clap::Parser;
 use sqlx::SqlitePool;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
 use crate::config::AppConfig;
-
-#[derive(Parser)]
-#[command(name = "hotspot", about = "AI Trend Monitor")]
-struct Cli {
-    #[arg(long, default_value = "config.toml")]
-    config: String,
-
-    #[arg(default_value = "all")]
-    mode: String, // all | api | parser | filter | pusher
-}
+use crate::pipeline::Pipeline;
 
 /// Ensure at least one API token exists in the database.
 /// On first startup, creates an initial admin token from config or auto-generates one.
@@ -65,8 +56,11 @@ pub async fn ensure_initial_token(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
-    let cli = Cli::parse();
-    let config = config::AppConfig::load(&cli.config)?;
+    // Config path from first CLI argument, default to "config.toml"
+    let config_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "config.toml".to_string());
+    let config = config::AppConfig::load(&config_path)?;
 
     // Ensure data directory exists
     let db_dir = std::path::Path::new(&config.database.path)
@@ -83,81 +77,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ensure at least one API token exists (first startup bootstrap)
     ensure_initial_token(&pool, &config).await?;
 
-    // Mode-based background task spawning
-    match cli.mode.as_str() {
-        "all" | "api" => {
-            // Spawn all three background tasks
-            let parser_pool = pool.clone();
-            let parser_cfg = config.parser.clone();
-            let filter_pool = pool.clone();
-            let filter_cfg = config.filter.clone();
-            let pusher_pool = pool.clone();
-            let pusher_cfg = config.pusher.clone();
+    // Create event-driven pipeline
+    let (pipeline, articles_rx, push_rx) = Pipeline::new();
 
-            tokio::spawn(async move {
-                services::parser::start_parser_loop(parser_pool, parser_cfg).await;
-            });
-            tokio::spawn(async move {
-                services::filter::start_filter_loop(filter_pool, filter_cfg).await;
-            });
-            tokio::spawn(async move {
-                services::pusher::start_pusher_loop(pusher_pool, pusher_cfg).await;
-            });
+    // Ctrl+C listener — signals graceful shutdown
+    let cancel_token = pipeline.cancel.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("Ctrl+C received, shutting down gracefully...");
+        cancel_token.cancel();
+    });
 
-            tracing::info!(
-                "Mode '{}': parser + filter + pusher running in background",
-                cli.mode
-            );
+    // Spawn three background tasks with event-driven links
+    tokio::spawn(services::parser::start_parser_loop(
+        pool.clone(),
+        config.parser.clone(),
+        pipeline.clone(),
+    ));
+    tokio::spawn(services::filter::start_filter_loop(
+        pool.clone(),
+        config.filter.clone(),
+        pipeline.clone(),
+        articles_rx,
+    ));
+    tokio::spawn(services::pusher::start_pusher_loop(
+        pool.clone(),
+        config.pusher.clone(),
+        pipeline.clone(),
+        push_rx,
+    ));
 
-            // Build router and start API server
-            let app = routes::create_router(pool.clone(), config.clone());
+    tracing::info!("Parser + Filter + Pusher running in background");
 
-            let addr: SocketAddr =
-                format!("{}:{}", config.server.host, config.server.port).parse()?;
-            tracing::info!("Server listening on {}", addr);
+    // Build router and start API server with graceful shutdown
+    let app = routes::create_router(pool.clone(), config.clone(), pipeline.clone());
 
-            let listener = TcpListener::bind(addr).await?;
-            axum::serve(listener, app).await?;
-        }
-        "parser" => {
-            tracing::info!("Mode 'parser': running parser only");
-            services::parser::start_parser_loop(pool.clone(), config.parser.clone()).await;
-        }
-        "filter" => {
-            tracing::info!("Mode 'filter': running filter only");
-            services::filter::start_filter_loop(pool.clone(), config.filter.clone()).await;
-        }
-        "pusher" => {
-            tracing::info!("Mode 'pusher': running pusher only");
-            services::pusher::start_pusher_loop(pool.clone(), config.pusher.clone()).await;
-        }
-        other => {
-            tracing::warn!("Unknown mode '{}', defaulting to 'all'", other);
-            let parser_pool = pool.clone();
-            let parser_cfg = config.parser.clone();
-            let filter_pool = pool.clone();
-            let filter_cfg = config.filter.clone();
-            let pusher_pool = pool.clone();
-            let pusher_cfg = config.pusher.clone();
+    let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
+    tracing::info!("Server listening on {}", addr);
 
-            tokio::spawn(async move {
-                services::parser::start_parser_loop(parser_pool, parser_cfg).await;
-            });
-            tokio::spawn(async move {
-                services::filter::start_filter_loop(filter_pool, filter_cfg).await;
-            });
-            tokio::spawn(async move {
-                services::pusher::start_pusher_loop(pusher_pool, pusher_cfg).await;
-            });
+    let listener = TcpListener::bind(addr).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(pipeline.cancel.cancelled_owned())
+        .await?;
 
-            let app = routes::create_router(pool.clone(), config.clone());
-            let addr: SocketAddr =
-                format!("{}:{}", config.server.host, config.server.port).parse()?;
-            tracing::info!("Server listening on {}", addr);
-            let listener = TcpListener::bind(addr).await?;
-            axum::serve(listener, app).await?;
-        }
-    }
-
+    tracing::info!("Shutdown complete");
     Ok(())
 }

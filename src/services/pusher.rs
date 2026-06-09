@@ -1,8 +1,10 @@
 use chrono::Utc;
 use sqlx::SqlitePool;
+use tokio::sync::mpsc;
 
 use crate::config::PusherConfig;
 use crate::db;
+use crate::pipeline::{Pipeline, PipelineEvent};
 
 /// Run one pusher iteration: poll pushable records, send webhooks,
 /// update status with exponential backoff.
@@ -248,11 +250,29 @@ fn extract_webhook_url(config_json: &str) -> Option<String> {
     parsed.get("url")?.as_str().map(|s| s.to_string())
 }
 
-/// Background pusher loop — runs `run_pusher_once` on a configurable interval.
-pub async fn start_pusher_loop(pool: SqlitePool, config: PusherConfig) {
-    let interval = std::time::Duration::from_secs(config.interval_seconds);
+/// Background pusher loop — runs `run_pusher_once` on a configurable interval,
+/// or immediately when the Filter signals new push records via `push_rx`.
+pub async fn start_pusher_loop(
+    pool: SqlitePool,
+    config: PusherConfig,
+    pipeline: Pipeline,
+    mut push_rx: mpsc::Receiver<PipelineEvent>,
+) {
+    let mut interval =
+        tokio::time::interval(std::time::Duration::from_secs(config.interval_seconds));
+
     loop {
-        tokio::time::sleep(interval).await;
-        run_pusher_once(&pool, &config).await;
+        tokio::select! {
+            _ = pipeline.cancel.cancelled() => {
+                tracing::info!("Pusher: shutting down gracefully");
+                break;
+            }
+            _ = interval.tick() => {
+                run_pusher_once(&pool, &config).await;
+            }
+            Some(_) = push_rx.recv() => {
+                run_pusher_once(&pool, &config).await;
+            }
+        }
     }
 }

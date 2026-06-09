@@ -3,20 +3,6 @@ use sqlx::SqlitePool;
 
 use crate::models::push_record::PushRecord;
 
-pub async fn insert_push_record(
-    pool: &SqlitePool,
-    hot_event_id: i64,
-    channel_id: i64,
-) -> Result<PushRecord, sqlx::Error> {
-    sqlx::query_as::<_, PushRecord>(
-        "INSERT INTO push_records (hot_event_id, channel_id) VALUES (?, ?) RETURNING *",
-    )
-    .bind(hot_event_id)
-    .bind(channel_id)
-    .fetch_one(pool)
-    .await
-}
-
 /// Insert push records for all enabled channels for a given hot event.
 /// Skips channels that already have a record (UNIQUE constraint).
 pub async fn insert_push_records_for_event(
@@ -26,7 +12,7 @@ pub async fn insert_push_records_for_event(
 ) -> Result<Vec<PushRecord>, sqlx::Error> {
     let mut records = vec![];
     for &channel_id in channel_ids {
-        if let Ok(record) = sqlx::query_as::<_, PushRecord>(
+        if let Ok(Some(r)) = sqlx::query_as::<_, PushRecord>(
             "INSERT OR IGNORE INTO push_records (hot_event_id, channel_id) VALUES (?, ?) RETURNING *",
         )
         .bind(hot_event_id)
@@ -34,9 +20,7 @@ pub async fn insert_push_records_for_event(
         .fetch_optional(pool)
         .await
         {
-            if let Some(r) = record {
-                records.push(r);
-            }
+            records.push(r);
         }
     }
     Ok(records)
@@ -134,18 +118,6 @@ pub async fn list_push_records_with_details(
          JOIN push_channels pc ON pc.id = pr.channel_id \
          WHERE pr.hot_event_id = ? \
          ORDER BY pr.channel_id",
-    )
-    .bind(hot_event_id)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn get_push_records_by_hot_event(
-    pool: &SqlitePool,
-    hot_event_id: i64,
-) -> Result<Vec<PushRecord>, sqlx::Error> {
-    sqlx::query_as::<_, PushRecord>(
-        "SELECT * FROM push_records WHERE hot_event_id = ? ORDER BY channel_id",
     )
     .bind(hot_event_id)
     .fetch_all(pool)

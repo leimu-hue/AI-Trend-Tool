@@ -10,11 +10,13 @@ use tower_http::cors::CorsLayer;
 use crate::config::AppConfig;
 use crate::handlers::{channel, keyword, query, source, token};
 use crate::middleware::auth::auth_middleware;
+use crate::pipeline::Pipeline;
 
-pub fn create_router(pool: SqlitePool, config: AppConfig) -> Router {
+pub fn create_router(pool: SqlitePool, config: AppConfig, pipeline: Pipeline) -> Router {
     let state = AppState {
         pool: pool.clone(),
         config,
+        pipeline,
     };
 
     // ── API routes ──
@@ -66,4 +68,5 @@ async fn health_check() -> Json<serde_json::Value> {
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: AppConfig,
+    pub pipeline: Pipeline,
 }

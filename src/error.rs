@@ -9,12 +9,14 @@ pub enum AppError {
     /// 404 - Resource not found
     NotFound(String),
     /// 400 - Bad request
+    #[allow(dead_code)]
     BadRequest(String),
     /// 401 - Unauthorized
     Unauthorized(String),
     /// 409 - Conflict (e.g., unique constraint violation)
     Conflict(String),
     /// 500 - Internal error
+    #[allow(dead_code)]
     Internal(String),
     /// 500 - Database error (auto-converted from sqlx::Error)
     Database(sqlx::Error),
@@ -72,6 +74,7 @@ impl ApiResponse {
     }
 
     /// 204 No Content
+    #[allow(dead_code)]
     pub fn no_content() -> StatusCode {
         StatusCode::NO_CONTENT
     }

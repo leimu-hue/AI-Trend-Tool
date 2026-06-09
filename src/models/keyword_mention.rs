@@ -3,6 +3,7 @@ use serde::Serialize;
 use sqlx::FromRow;
 
 #[derive(Debug, FromRow, Serialize)]
+#[allow(dead_code)]
 pub struct KeywordMention {
     pub id: i64,
     pub keyword_id: i64,
