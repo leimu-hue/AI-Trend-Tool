@@ -61,5 +61,5 @@
 
 - [x] 9.1 运行 `cargo build` 确认全项目编译成功（无 warning 更佳）
 - [x] 9.2 运行 `cargo test` 确认已有测试全部通过
-- [ ] 9.3 手动启动验证：`cargo run -- config.toml`，确认日志显示三个模块启动 + server listening
-- [ ] 9.4 按 Ctrl+C，确认日志显示三个模块 "shutting down gracefully"，进程干净退出
+- [x] 9.3 手动启动验证：`cargo run -- config.toml`，确认日志显示三个模块启动 + server listening
+- [x] 9.4 按 Ctrl+C，确认日志显示三个模块 "shutting down gracefully"，进程干净退出

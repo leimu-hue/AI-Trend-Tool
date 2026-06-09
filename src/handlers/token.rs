@@ -19,6 +19,10 @@ pub async fn create_token(
     State(state): State<AppState>,
     Json(req): Json<CreateTokenRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if req.name.trim().is_empty() {
+        return Err(AppError::BadRequest("name must not be empty".into()));
+    }
+
     // Generate 64-character random hex token (32 random bytes)
     let bytes: [u8; 32] = rand::thread_rng().gen();
     let token_str = hex::encode(bytes);
@@ -50,9 +54,7 @@ pub async fn revoke_token(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, AppError> {
-    db::token::revoke_token(&state.pool, id).await?;
-
-    // Verify the token existed by querying it
+    // Check existence first
     let exists = db::token::get_token_by_id(&state.pool, id).await?;
     if exists.is_none() {
         return Err(AppError::NotFound(format!(
@@ -61,5 +63,6 @@ pub async fn revoke_token(
         )));
     }
 
+    db::token::revoke_token(&state.pool, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

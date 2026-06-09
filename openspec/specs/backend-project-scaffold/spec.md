@@ -8,17 +8,18 @@ Rust project skeleton for TrendAITool backend: Cargo.toml with dependencies, TOM
 
 ### Requirement: Project compiles and runs
 
-The project SHALL compile with `cargo build` and start an HTTP server with `cargo run`. The server SHALL bind to the host and port specified in `config.toml`.
+The project SHALL compile with `cargo build` and start an HTTP server with `cargo run`. The server SHALL bind to the host and port specified in `config.toml`. On startup, the system SHALL always spawn all three background modules (Parser, Filter, Pusher) alongside the API server.
 
-#### Scenario: Server starts and responds to health check
+#### Scenario: Server starts all modules by default
 
-- **WHEN** the server is started with `cargo run -- --config config.toml all`
-- **THEN** the server SHALL listen on the configured host:port
-- **THEN** `GET /health` SHALL return HTTP 200 with JSON body `{"status": "ok"}`
+- **WHEN** the server is started with `cargo run -- config.toml`
+- **THEN** the server SHALL spawn Parser, Filter, and Pusher background tasks
+- **AND** the server SHALL listen on the configured host:port
+- **AND** `GET /health` SHALL return HTTP 200 with JSON body `{"status": "ok"}`
 
 ### Requirement: Configuration parsing
 
-The system SHALL load configuration from a TOML file specified by the `--config` CLI argument. The configuration SHALL include sections for server, database, auth, parser, filter, and pusher. Invalid or missing config SHALL cause the process to exit with an error message.
+The system SHALL load configuration from a TOML file specified as the first positional argument (or default to `config.toml`). The configuration SHALL include sections for server, database, auth, parser, filter, and pusher. Invalid or missing config SHALL cause the process to exit with an error message.
 
 #### Scenario: Load valid config file
 
@@ -34,6 +35,11 @@ The system SHALL load configuration from a TOML file specified by the `--config`
 
 - **WHEN** the config file contains a string value where an integer is expected
 - **THEN** `AppConfig::load()` SHALL return a deserialization error
+
+#### Scenario: ParserConfig requires interval_seconds
+
+- **WHEN** `config.toml` does not contain `interval_seconds` in the `[parser]` section
+- **THEN** `AppConfig::load()` SHALL return a deserialization error unless a default value is provided via `#[serde(default = "...")]`
 
 ### Requirement: SQLite connection pool
 
@@ -95,20 +101,6 @@ The system SHALL provide an `ApiResponse` helper with methods for 200 OK, 201 Cr
 
 - **WHEN** an API endpoint successfully deletes a resource
 - **THEN** `ApiResponse::no_content()` SHALL return HTTP 204 with no body
-
-### Requirement: CLI mode selection
-
-The system SHALL accept a positional CLI argument to select the run mode. Valid modes are `all`, `api`, `parser`, `filter`, and `pusher`. The default mode SHALL be `all`.
-
-#### Scenario: Default mode
-
-- **WHEN** the server is started with `cargo run -- --config config.toml`
-- **THEN** the system SHALL run in `all` mode
-
-#### Scenario: Explicit mode
-
-- **WHEN** the server is started with `cargo run -- --config config.toml api`
-- **THEN** the system SHALL run only the API server
 
 ### Requirement: CORS support
 

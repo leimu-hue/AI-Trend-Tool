@@ -1,4 +1,5 @@
 use chrono::Utc;
+use futures::stream::StreamExt;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 
@@ -20,7 +21,7 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig) {
         }
     };
 
-    let retry_due = match db::push_record::list_retry_due_records(pool).await {
+    let retry_due = match db::push_record::list_retry_due_records(pool, config.max_retries).await {
         Ok(records) => records,
         Err(e) => {
             tracing::error!("Pusher: failed to list retry-due records: {}", e);
@@ -36,12 +37,19 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig) {
 
     tracing::info!("Pusher: {} pushable record(s)", pushable.len());
 
-    // 2. Process each record
+    // 2. Process each record concurrently (max 8 concurrent)
     let client = reqwest::Client::new();
 
-    for record in &pushable {
-        process_one(pool, config, &client, record).await;
-    }
+    futures::stream::iter(&pushable)
+        .for_each_concurrent(8, |record| {
+            let pool = pool.clone();
+            let config = config.clone();
+            let client = client.clone();
+            async move {
+                process_one(&pool, &config, &client, record).await;
+            }
+        })
+        .await;
 }
 
 /// Process a single push record: lookup channel & event, POST webhook, update status.

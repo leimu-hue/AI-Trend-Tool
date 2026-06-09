@@ -1,16 +1,22 @@
 use sqlx::SqlitePool;
 
-/// Insert a keyword mention record (keyword_id, article_id).
-/// Returns Ok(()) on success; silently ignores duplicates.
-pub async fn insert_keyword_mention(
+/// Batch insert keyword mentions in chunks of 100 to avoid SQLite variable limits.
+/// Each chunk uses a single INSERT with multiple value tuples.
+pub async fn batch_insert_keyword_mentions(
     pool: &SqlitePool,
-    keyword_id: i64,
-    article_id: i64,
+    mentions: &[(i64, i64)],
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT OR IGNORE INTO keyword_mentions (keyword_id, article_id) VALUES (?, ?)")
-        .bind(keyword_id)
-        .bind(article_id)
-        .execute(pool)
-        .await?;
+    for chunk in mentions.chunks(100) {
+        let placeholders: Vec<String> = chunk.iter().map(|_| "(?, ?)".to_string()).collect();
+        let sql = format!(
+            "INSERT OR IGNORE INTO keyword_mentions (keyword_id, article_id) VALUES {}",
+            placeholders.join(", ")
+        );
+        let mut query = sqlx::query(&sql);
+        for (keyword_id, article_id) in chunk {
+            query = query.bind(*keyword_id).bind(*article_id);
+        }
+        query.execute(pool).await?;
+    }
     Ok(())
 }

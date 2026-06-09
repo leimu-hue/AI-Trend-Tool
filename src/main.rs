@@ -89,18 +89,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Spawn three background tasks with event-driven links
-    tokio::spawn(services::parser::start_parser_loop(
+    let parser_handle = tokio::spawn(services::parser::start_parser_loop(
         pool.clone(),
         config.parser.clone(),
         pipeline.clone(),
     ));
-    tokio::spawn(services::filter::start_filter_loop(
+    let filter_handle = tokio::spawn(services::filter::start_filter_loop(
         pool.clone(),
         config.filter.clone(),
         pipeline.clone(),
         articles_rx,
     ));
-    tokio::spawn(services::pusher::start_pusher_loop(
+    let pusher_handle = tokio::spawn(services::pusher::start_pusher_loop(
         pool.clone(),
         config.pusher.clone(),
         pipeline.clone(),
@@ -119,6 +119,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app)
         .with_graceful_shutdown(pipeline.cancel.cancelled_owned())
         .await?;
+
+    // Wait for background tasks to finish gracefully
+    let _ = tokio::join!(parser_handle, filter_handle, pusher_handle);
 
     tracing::info!("Shutdown complete");
     Ok(())

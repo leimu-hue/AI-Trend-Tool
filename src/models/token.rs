@@ -7,17 +7,19 @@ pub struct ApiToken {
     pub id: i64,
     pub name: String,
     pub token: String,
+    pub token_hash: String,
     pub last_used_at: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub expires_at: Option<NaiveDateTime>,
     pub revoked: bool,
 }
 
-/// 列表响应中隐藏 token 明文
+/// 列表响应中隐藏 token 明文，保留哈希用于识别
 #[derive(Debug, Serialize)]
 pub struct ApiTokenInfo {
     pub id: i64,
     pub name: String,
+    pub token_hash: String,
     pub last_used_at: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub expires_at: Option<NaiveDateTime>,
@@ -29,6 +31,7 @@ impl From<ApiToken> for ApiTokenInfo {
         ApiTokenInfo {
             id: t.id,
             name: t.name,
+            token_hash: t.token_hash,
             last_used_at: t.last_used_at,
             created_at: t.created_at,
             expires_at: t.expires_at,

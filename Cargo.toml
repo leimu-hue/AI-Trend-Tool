@@ -45,6 +45,12 @@ async-trait = "0.1"
 # Cancellation token for graceful shutdown
 tokio-util = "0.7"
 
+# SHA-256 for token hashing
+sha2 = "0.10"
+
+# Concurrent stream processing
+futures = "0.3"
+
 # ─── Profile: Release (production build) ───
 [profile.release]
 opt-level = 3          # Maximum optimization

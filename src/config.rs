@@ -58,6 +58,35 @@ impl AppConfig {
     pub fn load(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let config: AppConfig = toml::from_str(&content)?;
+        config.validate()?;
         Ok(config)
+    }
+
+    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.server.port == 0 {
+            return Err("server.port must be > 0".into());
+        }
+        if self.database.path.is_empty() {
+            return Err("database.path must not be empty".into());
+        }
+        if self.parser.interval_seconds == 0 {
+            return Err("parser.interval_seconds must be > 0".into());
+        }
+        if self.parser.max_concurrent_fetches == 0 {
+            return Err("parser.max_concurrent_fetches must be > 0".into());
+        }
+        if self.filter.interval_seconds == 0 {
+            return Err("filter.interval_seconds must be > 0".into());
+        }
+        if self.filter.batch_size == 0 {
+            return Err("filter.batch_size must be > 0".into());
+        }
+        if self.pusher.interval_seconds == 0 {
+            return Err("pusher.interval_seconds must be > 0".into());
+        }
+        if self.pusher.max_retries == 0 {
+            return Err("pusher.max_retries must be > 0".into());
+        }
+        Ok(())
     }
 }

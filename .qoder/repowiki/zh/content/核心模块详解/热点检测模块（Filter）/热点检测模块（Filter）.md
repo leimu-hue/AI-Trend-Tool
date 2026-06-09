@@ -3,6 +3,9 @@
 <cite>
 **本文引用的文件**
 - [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
 - [hot_event.rs](file://src/models/hot_event.rs)
 - [keyword.rs](file://src/models/keyword.rs)
 - [keyword_mention.rs](file://src/models/keyword_mention.rs)
@@ -14,7 +17,6 @@
 - [filter_spec.md](file://openspec/specs/filter-module/spec.md)
 - [keyword_api.md](file://docs/apis/keyword-api.md)
 - [config.rs](file://src/config.rs)
-- [main.rs](file://src/main.rs)
 </cite>
 
 ## 目录
@@ -30,29 +32,41 @@
 10. [附录](#附录)
 
 ## 简介
-本技术文档聚焦“热点检测模块（Filter）”，围绕以下目标展开：  
+本技术文档聚焦"热点检测模块（Filter）"，围绕以下目标展开：  
 - 多模式关键词匹配的Aho-Corasick实现与性能优化  
 - 小时桶计数机制（时间窗口划分、滑动窗口更新、内存管理）  
 - 统计突发检测（基尼系数、阈值设定、异常检测逻辑）  
 - HotEvent数据模型字段设计与业务含义  
 - 关键词管理（新增、删除、批量操作）  
+- **新增**：基于上游通知的响应式处理机制与Pipeline集成  
+- **新增**：手动触发接口与实时响应能力  
 - 算法流程图、配置参数说明与性能调优建议  
 
-本模块通过服务层对关键词与文章进行实时处理，产出热点事件并持久化到数据库，同时提供查询接口供前端或外部系统消费。
+本模块通过服务层对关键词与文章进行实时处理，产出热点事件并持久化到数据库，同时提供查询接口供前端或外部系统消费。**最新重构引入了事件驱动的Pipeline架构，支持基于上游通知的响应式处理和手动触发功能。**
 
 ## 项目结构
 热点检测模块位于后端服务层，核心文件分布如下：
-- 服务层：src/services/filter.rs（热点检测主流程）
+- 服务层：src/services/filter.rs（热点检测主流程）、src/services/pusher.rs（推送服务）
+- 事件管道：src/pipeline.rs（跨模块通信管道）
+- 路由与触发：src/routes.rs（API路由）、src/main.rs（入口程序）
 - 模型层：src/models/hot_event.rs、src/models/keyword.rs、src/models/keyword_mention.rs
 - 数据访问层：src/db/hot_event.rs、src/db/keyword.rs、src/db/keyword_mention.rs
 - 处理器层：src/handlers/keyword.rs、src/handlers/query.rs
 - 规格与API：openspec/specs/filter-module/spec.md、docs/apis/keyword-api.md
-- 配置与入口：src/config.rs、src/main.rs
+- 配置与入口：src/config.rs
 
 ```mermaid
 graph TB
 subgraph "服务层"
 F["filter.rs"]
+P["pusher.rs"]
+end
+subgraph "事件管道"
+PIPE["pipeline.rs"]
+end
+subgraph "路由与触发"
+ROUTES["routes.rs"]
+MAIN["main.rs"]
 end
 subgraph "模型层"
 HE["hot_event.rs"]
@@ -72,13 +86,14 @@ subgraph "规格与API"
 SPEC["filter-module/spec.md"]
 API["keyword-api.md"]
 end
-subgraph "配置与入口"
+subgraph "配置"
 CFG["config.rs"]
-MAIN["main.rs"]
 end
-F --> HE
-F --> KW
-F --> KM
+F --> PIPE
+P --> PIPE
+PIPE --> MAIN
+ROUTES --> F
+ROUTES --> P
 HE --> DB_HE
 KW --> DB_KW
 KM --> DB_KM
@@ -88,11 +103,14 @@ SPEC --> F
 API --> H_KW
 API --> H_Q
 CFG --> F
-MAIN --> F
 ```
 
 **图表来源**
 - [filter.rs](file://src/services/filter.rs)
+- [pusher.rs](file://src/services/pusher.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
 - [hot_event.rs](file://src/models/hot_event.rs)
 - [keyword.rs](file://src/models/keyword.rs)
 - [keyword_mention.rs](file://src/models/keyword_mention.rs)
@@ -104,10 +122,13 @@ MAIN --> F
 - [filter_spec.md](file://openspec/specs/filter-module/spec.md)
 - [keyword_api.md](file://docs/apis/keyword-api.md)
 - [config.rs](file://src/config.rs)
-- [main.rs](file://src/main.rs)
 
 **章节来源**
 - [filter.rs](file://src/services/filter.rs)
+- [pusher.rs](file://src/services/pusher.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
 - [hot_event.rs](file://src/models/hot_event.rs)
 - [keyword.rs](file://src/models/keyword.rs)
 - [keyword_mention.rs](file://src/models/keyword_mention.rs)
@@ -119,7 +140,6 @@ MAIN --> F
 - [filter_spec.md](file://openspec/specs/filter-module/spec.md)
 - [keyword_api.md](file://docs/apis/keyword-api.md)
 - [config.rs](file://src/config.rs)
-- [main.rs](file://src/main.rs)
 
 ## 核心组件
 - 过滤器服务（Aho-Corasick多模式匹配）：负责从文章文本中提取所有匹配的关键词，并记录命中位置与上下文信息。
@@ -128,15 +148,19 @@ MAIN --> F
 - HotEvent模型：描述热点事件的结构化数据，包含关键词、时间窗口、统计指标与状态。
 - 关键词管理：提供关键词的增删改查与批量操作，支持与文章解析流程解耦。
 - 查询接口：对外暴露热点事件查询能力，支持分页、筛选与排序。
+- **新增**：Pipeline事件管道：统一管理模块间通信，支持上游通知驱动的响应式处理。
+- **新增**：手动触发接口：提供POST /api/v1/trigger/filter端点，支持立即执行过滤器并通知下游。
 
 **章节来源**
 - [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
 - [hot_event.rs](file://src/models/hot_event.rs)
 - [keyword.rs](file://src/models/keyword.rs)
 - [keyword_mention.rs](file://src/models/keyword_mention.rs)
 
 ## 架构总览
-下图展示热点检测模块的端到端流程：文章进入解析器后，由过滤器执行多模式匹配，生成关键词命中记录；随后进行小时桶计数与突发检测，最终落库为HotEvent并可被查询。
+下图展示热点检测模块的端到端流程：文章进入解析器后，由过滤器执行多模式匹配，生成关键词命中记录；随后进行小时桶计数与突发检测，最终落库为HotEvent并可被查询。**最新架构支持事件驱动的响应式处理和手动触发。**
 
 ```mermaid
 sequenceDiagram
@@ -144,20 +168,27 @@ participant Parser as "解析器"
 participant Filter as "过滤器服务"
 participant Bucket as "小时桶计数"
 participant Detector as "突发检测(基尼)"
+participant Pipeline as "事件管道"
+participant Pusher as "推送服务"
 participant DB as "数据库"
 participant API as "查询接口"
-Parser->>Filter : 文章内容与元数据
+Parser->>Pipeline : PipelineEvent : : NewArticle
+Pipeline->>Filter : 响应式触发
 Filter->>Filter : Aho-Corasick多模式匹配
 Filter->>Bucket : 更新关键词小时桶计数
 Bucket->>Detector : 提供小时桶序列
 Detector->>Detector : 计算基尼系数与阈值判定
 Detector-->>DB : 写入HotEvent
+DB-->>Pusher : 有新热点事件
+Pusher->>Pipeline : PipelineEvent : : NewData
 API->>DB : 查询热点事件
 DB-->>API : 返回结果
 ```
 
 **图表来源**
 - [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [pusher.rs](file://src/services/pusher.rs)
 - [hot_event_db.rs](file://src/db/hot_event.rs)
 - [query_handler.rs](file://src/handlers/query.rs)
 
@@ -190,7 +221,7 @@ Next --> End(["结束"])
 - [filter.rs](file://src/services/filter.rs)
 
 ### 小时桶计数机制
-- 时间窗口划分：以小时为单位划分时间窗口，每个关键词在每个小时对应一个计数桶。桶的键由“关键词ID+小时时间戳”组成。
+- 时间窗口划分：以小时为单位划分时间窗口，每个关键词在每个小时对应一个计数桶。桶的键由"关键词ID+小时时间戳"组成。
 - 滑动窗口更新：定期清理超过保留窗口（如最近N小时）的历史桶，确保内存占用可控。更新时对新到达的命中进行累加。
 - 内存管理：采用哈希表存储桶，键为组合键，值为计数；通过定时任务或事件驱动清理过期桶；对空桶进行惰性删除，降低写放大。
 - 原子性：在高并发场景下，使用轻量级锁或无锁结构保护桶更新，保证计数准确性。
@@ -314,28 +345,101 @@ Handler-->>Admin : 操作完成
 - [query_handler.rs](file://src/handlers/query.rs)
 - [hot_event_db.rs](file://src/db/hot_event.rs)
 
+### **新增** Pipeline事件管道与响应式处理
+- **Pipeline结构**：统一管理模块间通信，包含articles_ready_tx和push_ready_tx两个MPSC通道，以及cancel信号。
+- **事件类型**：PipelineEvent枚举定义了NewArticle和NewData两种事件类型，分别用于通知解析器和推送器。
+- **响应式处理机制**：
+  - 解析器触发：Parser检测到新文章时发送NewArticle事件，Filter收到后立即执行过滤。
+  - 定时触发：Filter内部定时器按配置间隔触发过滤，若检测到新热点则发送NewData事件。
+  - 下游通知：Filter通过push_ready_tx通知Pusher有新数据可推送。
+- **手动触发接口**：POST /api/v1/trigger/filter端点立即执行run_filter_once，若返回true则通知下游。
+
+```mermaid
+flowchart TD
+subgraph "事件管道"
+ARTICLES["articles_ready_tx<br/>NewArticle事件"]
+PUSH["push_ready_tx<br/>NewData事件"]
+CANCEL["cancel信号"]
+END
+subgraph "模块交互"
+Parser["解析器"] --> ARTICLES
+ARTICLES --> Filter["过滤器"]
+Filter --> PUSH
+PUSH --> Pusher["推送器"]
+Filter --> CANCEL
+end
+```
+
+**图表来源**
+- [pipeline.rs](file://src/pipeline.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pusher.rs](file://src/services/pusher.rs)
+
+**章节来源**
+- [pipeline.rs](file://src/pipeline.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pusher.rs](file://src/services/pusher.rs)
+
+### **新增** 手动触发接口实现
+- **接口规范**：POST /api/v1/trigger/filter，需要Bearer token认证。
+- **执行逻辑**：调用run_filter_once执行一次完整的过滤流程，根据返回值决定是否通知下游。
+- **通知机制**：当run_filter_once返回true（表示创建了新的推送记录）时，通过push_ready_tx发送NewData事件。
+- **响应格式**：成功时返回{"data": {"message": "Filter executed"}}，失败时返回相应的HTTP状态码。
+
+```mermaid
+sequenceDiagram
+participant Client as "客户端"
+participant Routes as "路由层"
+participant Filter as "过滤器服务"
+participant Pipeline as "事件管道"
+Client->>Routes : POST /api/v1/trigger/filter
+Routes->>Filter : run_filter_once()
+Filter->>Filter : 执行过滤流程
+Filter-->>Routes : 返回布尔值
+Routes->>Pipeline : 如为true则发送NewData
+Routes-->>Client : 200 OK 或错误响应
+```
+
+**图表来源**
+- [routes.rs](file://src/routes.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+
+**章节来源**
+- [routes.rs](file://src/routes.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+
 ## 依赖关系分析
 - 服务层依赖模型层与数据访问层，向上提供业务能力，向下封装数据持久化细节。
+- **新增**：服务层现在依赖Pipeline事件管道，实现模块间的松耦合通信。
 - 处理器层依赖服务层，负责HTTP协议转换与参数校验。
 - 配置层为服务层提供运行参数（如阈值、窗口大小、清理周期），入口程序负责加载配置并启动服务。
 
 ```mermaid
 graph LR
 CFG["config.rs"] --> F["filter.rs"]
+F --> PIPE["pipeline.rs"]
 F --> HE["hot_event.rs"]
 F --> KW["keyword.rs"]
 F --> KM["keyword_mention.rs"]
+PIPE --> MAIN["main.rs"]
+ROUTES["routes.rs"] --> F
+ROUTES --> PIPE
 HE --> DB_HE["hot_event_db.rs"]
 KW --> DB_KW["keyword_db.rs"]
 KM --> DB_KM["keyword_mention_db.rs"]
 H_KW["keyword_handler.rs"] --> DB_KW
 H_Q["query_handler.rs"] --> DB_HE
-MAIN["main.rs"] --> F
+MAIN --> PIPE
 ```
 
 **图表来源**
 - [config.rs](file://src/config.rs)
 - [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
+- [main.rs](file://src/main.rs)
 - [hot_event.rs](file://src/models/hot_event.rs)
 - [keyword.rs](file://src/models/keyword.rs)
 - [keyword_mention.rs](file://src/models/keyword_mention.rs)
@@ -344,10 +448,12 @@ MAIN["main.rs"] --> F
 - [keyword_mention_db.rs](file://src/db/keyword_mention.rs)
 - [keyword_handler.rs](file://src/handlers/keyword.rs)
 - [query_handler.rs](file://src/handlers/query.rs)
-- [main.rs](file://src/main.rs)
 
 **章节来源**
 - [config.rs](file://src/config.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
+- [routes.rs](file://src/routes.rs)
 - [main.rs](file://src/main.rs)
 
 ## 性能考虑
@@ -361,11 +467,13 @@ MAIN["main.rs"] --> F
 - 存储阶段
   - 小时桶使用紧凑的键值结构，减少索引开销。
   - 对热点事件按时间与状态建立复合索引，加速查询。
+- **新增**：事件驱动优化
+  - 响应式处理减少不必要的定时轮询，提高资源利用率。
+  - 手动触发接口支持按需执行，避免系统负载峰值。
+  - Pipeline事件管道采用非阻塞发送，防止消息积压。
 - 资源控制
   - 设置最大并发与队列长度，防止突发流量导致雪崩。
   - 定期监控内存与CPU，动态调整窗口与阈值参数。
-
-[本节为通用性能指导，不直接分析具体文件]
 
 ## 故障排查指南
 - 匹配不到关键词
@@ -380,16 +488,23 @@ MAIN["main.rs"] --> F
 - 数据不一致
   - 核对滑动窗口清理策略与时间偏移。
   - 检查并发更新是否导致计数偏差。
+- **新增**：事件管道问题
+  - 检查Pipeline事件是否正确发送和接收。
+  - 验证MPSC通道的容量和背压机制。
+  - 确认cancel信号是否正确传播。
+- **新增**：手动触发失败
+  - 验证Bearer token认证是否正确。
+  - 检查run_filter_once返回值逻辑。
+  - 确认下游通知是否正常发送。
 
 **章节来源**
 - [filter.rs](file://src/services/filter.rs)
+- [pipeline.rs](file://src/pipeline.rs)
 - [hot_event_db.rs](file://src/db/hot_event.rs)
 - [keyword_db.rs](file://src/db/keyword.rs)
 
 ## 结论
-热点检测模块通过Aho-Corasick实现高效的多模式匹配，结合小时桶计数与基尼系数统计，能够稳定地识别异常热点事件。模块化设计使关键词管理与检测逻辑解耦，便于扩展与维护。配合合理的配置与性能优化策略，可在高并发场景下保持稳定与高效。
-
-[本节为总结性内容，不直接分析具体文件]
+热点检测模块通过Aho-Corasick实现高效的多模式匹配，结合小时桶计数与基尼系数统计，能够稳定地识别异常热点事件。**最新重构引入了事件驱动的Pipeline架构，实现了模块间的松耦合通信和响应式处理，显著提升了系统的实时性和资源利用率。** 手动触发接口进一步增强了系统的可控性，支持按需执行和快速响应。模块化设计使关键词管理与检测逻辑解耦，便于扩展与维护。配合合理的配置与性能优化策略，可在高并发场景下保持稳定与高效。
 
 ## 附录
 
@@ -402,11 +517,14 @@ MAIN["main.rs"] --> F
   - 基尼系数阈值
   - 小时窗口长度（小时）
   - 保留小时数（用于滑动窗口清理）
+  - **新增**：过滤器执行间隔（秒）
 - 性能相关
   - 并发扫描线程数
   - 分段大小（字节）
   - 缓存有效期（秒）
   - 清理周期（秒）
+  - **新增**：Pipeline通道容量
+  - **新增**：事件超时时间
 
 **章节来源**
 - [config.rs](file://src/config.rs)
@@ -417,8 +535,20 @@ MAIN["main.rs"] --> F
 - 删除关键词：支持软删除与硬删除
 - 批量操作：导入、导出、禁用/启用、批量更新标签
 - 查询接口：按关键词、时间、状态筛选，支持分页与排序
+- **新增**：手动触发接口：POST /api/v1/trigger/filter，立即执行过滤器并通知下游
 
 **章节来源**
 - [keyword_api.md](file://docs/apis/keyword-api.md)
 - [keyword_handler.rs](file://src/handlers/keyword.rs)
 - [query_handler.rs](file://src/handlers/query.rs)
+- [routes.rs](file://src/routes.rs)
+
+### **新增** Pipeline事件类型说明
+- NewArticle事件：通知过滤器有新文章到达，触发响应式处理
+- NewData事件：通知推送器有新热点事件可推送
+- 取消信号：优雅关闭各模块的处理循环
+
+**章节来源**
+- [pipeline.rs](file://src/pipeline.rs)
+- [filter.rs](file://src/services/filter.rs)
+- [pusher.rs](file://src/services/pusher.rs)

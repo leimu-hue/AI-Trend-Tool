@@ -34,14 +34,18 @@ pub async fn list_pending_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, 
     .await
 }
 
-pub async fn list_retry_due_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, sqlx::Error> {
+pub async fn list_retry_due_records(
+    pool: &SqlitePool,
+    max_retries: u32,
+) -> Result<Vec<PushRecord>, sqlx::Error> {
     sqlx::query_as::<_, PushRecord>(
         "SELECT * FROM push_records \
          WHERE status = 'failed' \
-         AND retry_count < 3 \
+         AND retry_count < ? \
          AND next_retry_at <= datetime('now') \
          ORDER BY next_retry_at ASC",
     )
+    .bind(max_retries as i32)
     .fetch_all(pool)
     .await
 }

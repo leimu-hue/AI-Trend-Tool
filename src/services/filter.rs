@@ -91,6 +91,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     let current_hour = Utc::now().format("%Y%m%d%H").to_string();
     let mut hourly_counts: HashMap<i64, i32> = HashMap::new(); // keyword_id -> count
     let mut article_ids: Vec<i64> = Vec::new();
+    let mut mentions: Vec<(i64, i64)> = Vec::new(); // (keyword_id, article_id)
 
     for article in &articles {
         let text = format!("{} {}", article.title, article.summary);
@@ -101,16 +102,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             for mat in ac.find_iter(&text) {
                 let (_, kw) = ci_kws[mat.pattern()];
                 *hourly_counts.entry(kw.id).or_insert(0) += 1;
-                if let Err(e) =
-                    db::keyword_mention::insert_keyword_mention(pool, kw.id, article.id).await
-                {
-                    tracing::error!(
-                        "Filter: failed to insert keyword_mention (kw={}, art={}): {}",
-                        kw.id,
-                        article.id,
-                        e
-                    );
-                }
+                mentions.push((kw.id, article.id));
             }
         }
 
@@ -119,17 +111,16 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             for mat in ac.find_iter(&text) {
                 let (_, kw) = cs_kws[mat.pattern()];
                 *hourly_counts.entry(kw.id).or_insert(0) += 1;
-                if let Err(e) =
-                    db::keyword_mention::insert_keyword_mention(pool, kw.id, article.id).await
-                {
-                    tracing::error!(
-                        "Filter: failed to insert keyword_mention (kw={}, art={}): {}",
-                        kw.id,
-                        article.id,
-                        e
-                    );
-                }
+                mentions.push((kw.id, article.id));
             }
+        }
+    }
+
+    if !mentions.is_empty() {
+        if let Err(e) =
+            db::keyword_mention::batch_insert_keyword_mentions(pool, &mentions).await
+        {
+            tracing::error!("Filter: batch insert keyword_mentions failed: {}", e);
         }
     }
 
@@ -142,6 +133,32 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
         }
     };
 
+    // Batch-load historical stats for all keywords
+    let all_counts = match db::hot_event::get_all_hourly_counts(
+        pool,
+        config.history_hours.max(config.min_history_hours) as i32,
+    )
+    .await
+    {
+        Ok(counts) => counts,
+        Err(e) => {
+            tracing::error!("Filter: failed to load historical counts: {}", e);
+            return false;
+        }
+    };
+
+    // Group by keyword_id: (Vec<counts>, num_distinct_hour_buckets)
+    let mut kw_stats: HashMap<i64, (Vec<i32>, usize)> = HashMap::new();
+    for (kw_id, _hour, count) in &all_counts {
+        let entry = kw_stats.entry(*kw_id).or_insert_with(|| (vec![], 0usize));
+        entry.0.push(*count);
+    }
+    // Count distinct hours per keyword (for min_history_hours check)
+    let mut kw_hours: HashMap<i64, usize> = HashMap::new();
+    for (kw_id, _hour, _count) in &all_counts {
+        *kw_hours.entry(*kw_id).or_insert(0) += 1;
+    }
+
     let mut created_push = false;
 
     for kw in &keywords {
@@ -151,8 +168,19 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             continue;
         }
 
-        let (mean, stddev) =
-            compute_historical_stats(pool, kw.id, config.history_hours as i32).await;
+        let (mean, stddev) = kw_stats
+            .get(&kw.id)
+            .map(|(counts, _)| {
+                if counts.is_empty() {
+                    (0.0, 0.0)
+                } else {
+                    let n = counts.len() as f64;
+                    let m = counts.iter().map(|c| *c as f64).sum::<f64>() / n;
+                    let v = counts.iter().map(|c| (*c as f64 - m).powi(2)).sum::<f64>() / n;
+                    (m, v.sqrt())
+                }
+            })
+            .unwrap_or((0.0, 0.0));
 
         // Record the hourly count in hot_events (upsert for idempotency)
         let hot_event =
@@ -172,11 +200,10 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             };
 
         // Burst detection: is current_count above threshold?
-        let has_enough_history =
-            db::hot_event::get_hourly_counts(pool, kw.id, config.min_history_hours as i32)
-                .await
-                .map(|rows| rows.len() >= config.min_history_hours as usize)
-                .unwrap_or(false);
+        let has_enough_history = kw_hours
+            .get(&kw.id)
+            .map(|&h| h >= config.min_history_hours as usize)
+            .unwrap_or(false);
 
         let threshold = mean + (kw.std_multiplier * stddev);
         let is_hotspot = has_enough_history
@@ -218,39 +245,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     created_push
 }
 
-/// Compute historical mean and stddev from hot_events hourly counts
-async fn compute_historical_stats(
-    pool: &SqlitePool,
-    keyword_id: i64,
-    history_hours: i32,
-) -> (f64, f64) {
-    let rows = match db::hot_event::get_hourly_counts(pool, keyword_id, history_hours).await {
-        Ok(rows) => rows,
-        Err(e) => {
-            tracing::error!(
-                "Filter: failed to get historical counts for kw {}: {}",
-                keyword_id,
-                e
-            );
-            return (0.0, 0.0);
-        }
-    };
-
-    if rows.is_empty() {
-        return (0.0, 0.0);
-    }
-
-    let counts: Vec<f64> = rows.iter().map(|(_, c)| *c as f64).collect();
-    let n = counts.len() as f64;
-    let mean = counts.iter().sum::<f64>() / n;
-
-    let variance = counts.iter().map(|c| (c - mean).powi(2)).sum::<f64>() / n;
-    let stddev = variance.sqrt();
-
-    (mean, stddev)
-}
-
-/// Upsert a hot_event record: delete existing (keyword_id, hour_bucket), then insert.
+/// Upsert a hot_event record using ON CONFLICT for atomic idempotency.
 async fn upsert_hot_event_record(
     pool: &SqlitePool,
     keyword_id: i64,
@@ -259,21 +254,21 @@ async fn upsert_hot_event_record(
     mean_historical: f64,
     stddev_historical: f64,
 ) -> Result<crate::models::hot_event::HotEvent, sqlx::Error> {
-    // Delete existing record for idempotency (prevents duplicate key+hour rows)
-    sqlx::query("DELETE FROM hot_events WHERE keyword_id = ? AND hour_bucket = ?")
-        .bind(keyword_id)
-        .bind(hour_bucket)
-        .execute(pool)
-        .await?;
-
-    db::hot_event::insert_hot_event(
-        pool,
-        keyword_id,
-        hour_bucket,
-        count,
-        mean_historical,
-        stddev_historical,
+    sqlx::query_as::<_, crate::models::hot_event::HotEvent>(
+        "INSERT INTO hot_events (keyword_id, hour_bucket, count, mean_historical, stddev_historical) \
+         VALUES (?, ?, ?, ?, ?) \
+         ON CONFLICT(keyword_id, hour_bucket) DO UPDATE SET \
+         count = excluded.count, \
+         mean_historical = excluded.mean_historical, \
+         stddev_historical = excluded.stddev_historical \
+         RETURNING *",
     )
+    .bind(keyword_id)
+    .bind(hour_bucket)
+    .bind(count)
+    .bind(mean_historical)
+    .bind(stddev_historical)
+    .fetch_one(pool)
     .await
 }
 

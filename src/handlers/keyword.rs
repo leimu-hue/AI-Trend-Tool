@@ -28,6 +28,22 @@ pub async fn create_keyword(
     State(state): State<AppState>,
     Json(req): Json<CreateKeywordRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if req.word.trim().is_empty() {
+        return Err(AppError::BadRequest("word must not be empty".into()));
+    }
+    if let Some(sm) = req.std_multiplier {
+        if sm <= 0.0 {
+            return Err(AppError::BadRequest(
+                "std_multiplier must be positive".into(),
+            ));
+        }
+    }
+    if let Some(mhc) = req.min_hot_count {
+        if mhc <= 0 {
+            return Err(AppError::BadRequest("min_hot_count must be >= 1".into()));
+        }
+    }
+
     let keyword: Keyword = db::keyword::create_keyword(&state.pool, &req)
         .await
         .map_err(|e| match e {
@@ -49,6 +65,24 @@ pub async fn update_keyword(
     Path(id): Path<i64>,
     Json(req): Json<UpdateKeywordRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if let Some(ref word) = req.word {
+        if word.trim().is_empty() {
+            return Err(AppError::BadRequest("word must not be empty".into()));
+        }
+    }
+    if let Some(sm) = req.std_multiplier {
+        if sm <= 0.0 {
+            return Err(AppError::BadRequest(
+                "std_multiplier must be positive".into(),
+            ));
+        }
+    }
+    if let Some(mhc) = req.min_hot_count {
+        if mhc <= 0 {
+            return Err(AppError::BadRequest("min_hot_count must be >= 1".into()));
+        }
+    }
+
     // Verify the keyword exists
     let _existing = db::keyword::get_keyword_by_id(&state.pool, id)
         .await?

@@ -32,16 +32,17 @@ pub trait Parser: Send + Sync {
 
 /// RSS/Atom feed parser using `feed-rs`
 pub struct RssParser {
-    user_agent: String,
-    timeout_secs: u64,
+    client: reqwest::Client,
 }
 
 impl RssParser {
     pub fn new(config: &ParserConfig) -> Self {
-        Self {
-            user_agent: config.default_user_agent.clone(),
-            timeout_secs: config.default_timeout_seconds,
-        }
+        let client = reqwest::Client::builder()
+            .user_agent(&config.default_user_agent)
+            .timeout(std::time::Duration::from_secs(config.default_timeout_seconds))
+            .build()
+            .expect("Failed to build reqwest client");
+        Self { client }
     }
 }
 
@@ -51,12 +52,7 @@ impl Parser for RssParser {
         &self,
         source: &DataSource,
     ) -> Result<Vec<ParsedArticle>, Box<dyn std::error::Error + Send + Sync>> {
-        let client = reqwest::Client::builder()
-            .user_agent(&self.user_agent)
-            .timeout(std::time::Duration::from_secs(self.timeout_secs))
-            .build()?;
-
-        let response = client.get(&source.url).send().await?;
+        let response = self.client.get(&source.url).send().await?;
         let body = response.bytes().await?;
         let feed = feed_rs::parser::parse(&body[..])?;
 

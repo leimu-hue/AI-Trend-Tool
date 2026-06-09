@@ -1,27 +1,7 @@
+use chrono::Utc;
 use sqlx::SqlitePool;
 
 use crate::models::hot_event::HotEvent;
-
-pub async fn insert_hot_event(
-    pool: &SqlitePool,
-    keyword_id: i64,
-    hour_bucket: &str,
-    count: i32,
-    mean_historical: f64,
-    stddev_historical: f64,
-) -> Result<HotEvent, sqlx::Error> {
-    sqlx::query_as::<_, HotEvent>(
-        "INSERT INTO hot_events (keyword_id, hour_bucket, count, mean_historical, stddev_historical) \
-         VALUES (?, ?, ?, ?, ?) RETURNING *",
-    )
-    .bind(keyword_id)
-    .bind(hour_bucket)
-    .bind(count)
-    .bind(mean_historical)
-    .bind(stddev_historical)
-    .fetch_one(pool)
-    .await
-}
 
 pub async fn get_hot_event_by_id(
     pool: &SqlitePool,
@@ -94,6 +74,26 @@ pub async fn get_hourly_counts(
     )
     .bind(keyword_id)
     .bind(hours)
+    .fetch_all(pool)
+    .await
+}
+
+/// Get hourly counts for all keywords in the last N hours as a single batch query.
+/// Returns (keyword_id, hour_bucket, count) tuples.
+pub async fn get_all_hourly_counts(
+    pool: &SqlitePool,
+    hours: i32,
+) -> Result<Vec<(i64, String, i32)>, sqlx::Error> {
+    let cutoff = Utc::now() - chrono::Duration::hours(hours as i64);
+    let cutoff_str = cutoff.format("%Y%m%d%H").to_string();
+    sqlx::query_as::<_, (i64, String, i32)>(
+        "SELECT keyword_id, hour_bucket, SUM(count) as total \
+         FROM hot_events \
+         WHERE hour_bucket >= ? \
+         GROUP BY keyword_id, hour_bucket \
+         ORDER BY hour_bucket",
+    )
+    .bind(cutoff_str)
     .fetch_all(pool)
     .await
 }

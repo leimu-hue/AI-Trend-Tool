@@ -1,4 +1,5 @@
 use axum::{
+    extract::State,
     middleware,
     routing::{get, post},
     Json, Router,
@@ -57,11 +58,23 @@ pub fn create_router(pool: SqlitePool, config: AppConfig, pipeline: Pipeline) ->
     Router::new()
         .route("/health", get(health_check))
         .nest("/api/v1", api)
+        .with_state(state)
         .layer(CorsLayer::permissive())
 }
 
-async fn health_check() -> Json<serde_json::Value> {
-    Json(json!({"status": "ok"}))
+async fn health_check(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let db_status = match sqlx::query("SELECT 1").execute(&state.pool).await {
+        Ok(_) => "ok",
+        Err(e) => {
+            tracing::warn!("Health check: database probe failed: {}", e);
+            "error"
+        }
+    };
+
+    let status = if db_status == "ok" { "ok" } else { "degraded" };
+    Json(json!({"status": status, "database": db_status}))
 }
 
 #[derive(Clone)]

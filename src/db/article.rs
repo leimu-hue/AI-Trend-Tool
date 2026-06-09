@@ -36,52 +36,28 @@ pub async fn list_articles(
     let per_page = query.per_page.unwrap_or(20).min(100);
     let offset = (page - 1) * per_page;
 
-    let (where_clause, _params) = build_article_filter(query);
+    let (where_clause, filter_params) = build_article_filter(query);
     let sql = format!(
         "SELECT * FROM articles{} ORDER BY fetched_at DESC LIMIT ? OFFSET ?",
         where_clause
     );
 
-    match (query.source_id, query.processed) {
-        (Some(source_id), Some(processed)) => {
-            sqlx::query_as::<_, Article>(&sql)
-                .bind(source_id)
-                .bind(processed)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(pool)
-                .await
-        }
-        (Some(source_id), None) => {
-            sqlx::query_as::<_, Article>(&sql)
-                .bind(source_id)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(pool)
-                .await
-        }
-        (None, Some(processed)) => {
-            sqlx::query_as::<_, Article>(&sql)
-                .bind(processed)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(pool)
-                .await
-        }
-        (None, None) => {
-            sqlx::query_as::<_, Article>(&sql)
-                .bind(per_page as i64)
-                .bind(offset as i64)
-                .fetch_all(pool)
-                .await
-        }
+    let mut q = sqlx::query_as::<_, Article>(&sql);
+    for p in &filter_params {
+        q = q.bind(*p);
     }
+    q.bind(per_page as i64)
+        .bind(offset as i64)
+        .fetch_all(pool)
+        .await
 }
 
-fn build_article_filter(query: &ArticleQuery) -> (String, Vec<(String, String)>) {
+fn build_article_filter(query: &ArticleQuery) -> (String, Vec<i64>) {
     let mut conditions = vec![];
-    if query.source_id.is_some() {
+    let mut params: Vec<i64> = vec![];
+    if let Some(source_id) = query.source_id {
         conditions.push("source_id = ?".to_string());
+        params.push(source_id);
     }
     if let Some(processed) = query.processed {
         if processed {
@@ -95,7 +71,7 @@ fn build_article_filter(query: &ArticleQuery) -> (String, Vec<(String, String)>)
     } else {
         format!(" WHERE {}", conditions.join(" AND "))
     };
-    (where_clause, vec![])
+    (where_clause, params)
 }
 
 pub async fn get_unprocessed_articles(
@@ -129,20 +105,13 @@ pub async fn mark_processed_batch(pool: &SqlitePool, ids: &[i64]) -> Result<(), 
 }
 
 pub async fn count_articles(pool: &SqlitePool, query: &ArticleQuery) -> Result<i64, sqlx::Error> {
-    let (where_clause, _) = build_article_filter(query);
+    let (where_clause, filter_params) = build_article_filter(query);
     let sql = format!("SELECT COUNT(*) as count FROM articles{}", where_clause);
 
-    let count: (i64,) = match (query.source_id, query.processed) {
-        (Some(source_id), Some(processed)) => {
-            sqlx::query_as(&sql)
-                .bind(source_id)
-                .bind(processed)
-                .fetch_one(pool)
-                .await?
-        }
-        (Some(source_id), None) => sqlx::query_as(&sql).bind(source_id).fetch_one(pool).await?,
-        (None, Some(processed)) => sqlx::query_as(&sql).bind(processed).fetch_one(pool).await?,
-        (None, None) => sqlx::query_as(&sql).fetch_one(pool).await?,
-    };
+    let mut q = sqlx::query_as(&sql);
+    for p in &filter_params {
+        q = q.bind(*p);
+    }
+    let count: (i64,) = q.fetch_one(pool).await?;
     Ok(count.0)
 }

@@ -27,6 +27,16 @@ pub async fn create_channel(
     State(state): State<AppState>,
     Json(req): Json<CreateChannelRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if req.name.trim().is_empty() {
+        return Err(AppError::BadRequest("name must not be empty".into()));
+    }
+    if req.config.trim().is_empty() {
+        return Err(AppError::BadRequest("config must not be empty".into()));
+    }
+    if serde_json::from_str::<serde_json::Value>(&req.config).is_err() {
+        return Err(AppError::BadRequest("config must be valid JSON".into()));
+    }
+
     let channel: PushChannel = db::channel::create_channel(&state.pool, &req).await?;
     Ok(ApiResponse::created(channel))
 }
@@ -40,6 +50,20 @@ pub async fn update_channel(
     Path(id): Path<i64>,
     Json(req): Json<UpdateChannelRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if let Some(ref name) = req.name {
+        if name.trim().is_empty() {
+            return Err(AppError::BadRequest("name must not be empty".into()));
+        }
+    }
+    if let Some(ref config) = req.config {
+        if config.trim().is_empty() {
+            return Err(AppError::BadRequest("config must not be empty".into()));
+        }
+        if serde_json::from_str::<serde_json::Value>(config).is_err() {
+            return Err(AppError::BadRequest("config must be valid JSON".into()));
+        }
+    }
+
     // Verify the channel exists
     let _existing = db::channel::get_channel_by_id(&state.pool, id)
         .await?

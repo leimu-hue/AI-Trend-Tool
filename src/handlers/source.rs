@@ -28,6 +28,18 @@ pub async fn create_source(
     State(state): State<AppState>,
     Json(req): Json<CreateSourceRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if req.name.trim().is_empty() {
+        return Err(AppError::BadRequest("name must not be empty".into()));
+    }
+    if req.url.trim().is_empty() {
+        return Err(AppError::BadRequest("url must not be empty".into()));
+    }
+    if !req.url.starts_with("http://") && !req.url.starts_with("https://") {
+        return Err(AppError::BadRequest(
+            "url must start with http:// or https://".into(),
+        ));
+    }
+
     let source: DataSource = db::source::create_source(&state.pool, &req).await?;
     Ok(ApiResponse::created(source))
 }
@@ -41,6 +53,22 @@ pub async fn update_source(
     Path(id): Path<i64>,
     Json(req): Json<UpdateSourceRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    if let Some(ref name) = req.name {
+        if name.trim().is_empty() {
+            return Err(AppError::BadRequest("name must not be empty".into()));
+        }
+    }
+    if let Some(ref url) = req.url {
+        if url.trim().is_empty() {
+            return Err(AppError::BadRequest("url must not be empty".into()));
+        }
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err(AppError::BadRequest(
+                "url must start with http:// or https://".into(),
+            ));
+        }
+    }
+
     // Verify the source exists
     let _existing = db::source::get_source_by_id(&state.pool, id)
         .await?

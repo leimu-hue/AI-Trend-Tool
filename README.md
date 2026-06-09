@@ -32,14 +32,9 @@ cargo build --release
 # 编辑配置（按需修改）
 vim config.toml
 
-# 运行全部模块
-cargo run -- --config config.toml all
-
-# 或单独运行某个模块
-cargo run -- --config config.toml api       # 仅 API 服务
-cargo run -- --config config.toml parser    # 仅 RSS 采集
-cargo run -- --config config.toml filter    # 仅关键词过滤 + 热点检测
-cargo run -- --config config.toml pusher    # 仅 Webhook 推送
+# 启动（所有模块在单一进程中运行：API + Parser + Filter + Pusher）
+# 配置文件路径为第一个位置参数，默认为 "config.toml"
+cargo run -- config.toml
 ```
 
 首次启动时自动执行数据库迁移（`docs/migrations/`），并在 `api_tokens` 表为空时创建初始管理员 Token（日志输出）。
@@ -78,18 +73,19 @@ npm run build
 ```toml
 [server]
 host = "0.0.0.0"          # 监听地址
-port = 8080               # 监听端口
+port = 3000               # 监听端口
 
 [database]
 path = "./docs/data/hotspot.db"   # SQLite 数据库路径
 
 [auth]
-initial_token = "your-token"      # 可选，初始管理员 Token
+initial_token = "your-token"      # 可选，初始管理员 Token（仅首次启动时生效）
 
 [parser]
 max_concurrent_fetches = 10
 default_user_agent = "HotspotMonitor/1.0"
 default_timeout_seconds = 30
+interval_seconds = 30             # 轮询到期数据源的间隔（秒）
 
 [filter]
 batch_size = 1000                 # 批量处理文章数
@@ -107,21 +103,26 @@ retry_base_seconds = 60           # 退避基础秒数
 
 ## 架构概览
 
-采用**管道模式（Pipeline）**，三个后台模块独立运行：
+采用**事件驱动管道模式（Event-Driven Pipeline）**，三个后台模块通过 `tokio::mpsc` 事件通道连接，同时保留定时器作为回退触发：
 
 ```
-┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Parser  │ ──▶ │  Filter  │ ──▶ │  Pusher  │
-│ RSS 采集 │     │ 关键词 + │     │ Webhook  │
-│          │     │ 热点检测 │     │  推送    │
-└──────────┘     └──────────┘     └──────────┘
+┌──────────┐  articles_ready  ┌──────────┐  push_ready  ┌──────────┐
+│  Parser  │ ──────────────▶  │  Filter  │ ──────────▶  │  Pusher  │
+│ RSS 采集 │   (mpsc event)   │ 关键词 + │  (mpsc event)│ Webhook  │
+│          │                  │ 热点检测 │               │  推送    │
+└──────────┘                  └──────────┘               └──────────┘
+   ▲ 定时器                      ▲ 定时器                   ▲ 定时器
+   (30s)                        (300s)                     (10s)
 ```
 
-| 模块 | 职责 | 运行周期 |
+| 模块 | 职责 | 触发方式 |
 |------|------|----------|
-| **Parser** | 拉取 RSS Feed，去重写入 `articles` 表 | 按数据源各自间隔 |
-| **Filter** | Aho-Corasick 关键词匹配 + 统计突发检测，生成热点事件 | 每 5 分钟 |
-| **Pusher** | 轮询待推送记录，POST Webhook，指数退避重试 | 每 10 秒 |
+| **Parser** | 拉取 RSS/Atom Feed，去重写入 `articles` 表 | 定时器（`interval_seconds`，默认 30s） |
+| **Filter** | Aho-Corasick 关键词匹配 + 统计突发检测，生成热点事件 | 定时器（默认 300s）**或** Parser 事件 |
+| **Pusher** | 轮询待推送记录，POST Webhook，线性退避重试 | 定时器（默认 10s）**或** Filter 事件 |
+
+所有模块在单一进程中运行，通过 `CancellationToken` 实现优雅关闭（Ctrl+C）。
+另提供手动触发端点：`POST /api/v1/trigger/filter` 和 `POST /api/v1/trigger/pusher`。
 
 ### 技术栈
 
@@ -133,7 +134,10 @@ retry_base_seconds = 60           # 退避基础秒数
 | RSS 解析 | feed-rs |
 | 关键词匹配 | Aho-Corasick |
 | HTTP 客户端 | reqwest 0.12 |
-| 前端 | React 19 + Electron 33 + Vite + Ant Design |
+| 前端框架 | React 19 + Electron 33 + Vite |
+| UI 组件 | Ant Design 5 |
+| 样式 | Tailwind CSS v4 |
+| 图表 | ECharts 5 |
 
 ---
 
@@ -152,9 +156,34 @@ Authorization: Bearer <your-token>
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/health` | 健康检查 |
+| **Token 管理** | | |
 | `POST` | `/api/v1/tokens` | 创建 Token（返回明文，仅此一次） |
 | `GET` | `/api/v1/tokens` | 列出所有 Token |
 | `POST` | `/api/v1/tokens/revoke/{id}` | 撤销 Token |
+| **数据源** | | |
+| `GET` | `/api/v1/sources` | 列出数据源 |
+| `POST` | `/api/v1/sources` | 创建数据源 |
+| `POST` | `/api/v1/sources/{id}/update` | 更新数据源 |
+| `POST` | `/api/v1/sources/{id}/delete` | 删除数据源 |
+| `POST` | `/api/v1/sources/{id}/fetch` | 手动触发抓取 |
+| **关键词** | | |
+| `GET` | `/api/v1/keywords` | 列出关键词 |
+| `POST` | `/api/v1/keywords` | 创建关键词 |
+| `POST` | `/api/v1/keywords/{id}/update` | 更新关键词 |
+| `POST` | `/api/v1/keywords/{id}/delete` | 删除关键词 |
+| **推送渠道** | | |
+| `GET` | `/api/v1/channels` | 列出推送渠道 |
+| `POST` | `/api/v1/channels` | 创建推送渠道 |
+| `POST` | `/api/v1/channels/{id}/update` | 更新推送渠道 |
+| `POST` | `/api/v1/channels/{id}/delete` | 删除推送渠道 |
+| **查询** | | |
+| `GET` | `/api/v1/articles` | 文章列表（分页 + 过滤） |
+| `GET` | `/api/v1/hotspots` | 热点事件列表（分页 + 关键词过滤） |
+| `GET` | `/api/v1/hotspots/{id}/push-records` | 热点的推送记录 |
+| `GET` | `/api/v1/trend/{keyword_id}` | 关键词小时趋势数据 |
+| **手动触发** | | |
+| `POST` | `/api/v1/trigger/filter` | 手动执行一次 Filter |
+| `POST` | `/api/v1/trigger/pusher` | 手动执行一次 Pusher |
 
 ### 响应格式
 
@@ -180,15 +209,16 @@ Authorization: Bearer <your-token>
 
 Filter 模块使用统计突发检测：
 
-1. **关键词匹配** — Aho-Corasick 多模式匹配，扫描未处理文章
-2. **小时桶计数** — 按关键词 + 小时窗口聚合文章数
-3. **突发判定** — 滑动窗口（默认 24h）计算均值和标准差，当前计数超过 `mean + std_multiplier × stddev` 且达到 `min_hot_count` 阈值时触发
-4. **去重** — 同一关键词同一小时内只生成一条热点事件
+1. **关键词匹配** — Aho-Corasick 多模式匹配（区分大小写 / 不区分大小写双自动机），扫描未处理文章
+2. **命中记录** — 匹配结果写入 `keyword_mentions` 表
+3. **小时桶计数** — 按关键词 + 小时窗口（`YYYYMMDDHH`）聚合文章数
+4. **突发判定** — 滑动窗口（默认 24h）计算均值和标准差，当前计数超过 `mean + std_multiplier × stddev` 且达到 `min_hot_count` 阈值时触发
+5. **去重** — 同一关键词同一小时内通过 `ON CONFLICT(keyword_id, hour_bucket) DO UPDATE` upsert，保证只有一条热点事件
 
 ## 推送重试机制
 
 - 最大重试 3 次
-- 退避公式：`retry_after = now + retry_base_seconds × 2^retry_count`
+- 退避公式：`next_retry_at = now + retry_count × retry_base_seconds`（线性退避）
 - 乐观锁（`WHERE status = ? AND retry_count < ?`）防止并发重复推送
 
 ---
@@ -200,13 +230,14 @@ TrendAITool/
 ├── config.toml              # 后端配置
 ├── Cargo.toml               # Rust 依赖
 ├── src/                     # 后端源码
-│   ├── main.rs              #   入口、CLI、Token 引导
+│   ├── main.rs              #   入口、Token 引导、模块编排
 │   ├── config.rs            #   配置解析
 │   ├── error.rs             #   统一错误处理
-│   ├── routes.rs            #   路由注册
+│   ├── routes.rs            #   路由注册 + AppState
+│   ├── pipeline.rs          #   事件驱动管道（mpsc 通道 + CancellationToken）
 │   ├── db.rs                #   连接池初始化
 │   ├── models/              #   数据模型
-│   ├── db/                  #   数据库操作
+│   ├── db/                  #   数据库操作（所有 SQL 查询集中于此）
 │   ├── handlers/            #   请求处理器
 │   ├── middleware/          #   认证中间件
 │   └── services/            #   Parser / Filter / Pusher
@@ -229,12 +260,13 @@ TrendAITool/
 | 表 | 说明 |
 |----|------|
 | `api_tokens` | Bearer Token（可撤销、可选过期） |
-| `data_sources` | RSS 数据源配置 |
-| `articles` | 采集文章（`link` 去重） |
-| `keywords` | 关键词及敏感度参数 |
-| `hot_events` | 热点事件（小时桶统计） |
+| `data_sources` | RSS 数据源配置（URL、间隔、JSON 扩展配置） |
+| `articles` | 采集文章（`link` 去重，`processed_at` 跟踪过滤状态） |
+| `keywords` | 关键词及敏感度参数（`std_multiplier`、`min_hot_count`、`case_sensitive`） |
+| `keyword_mentions` | 关键词命中明细（keyword_id + article_id） |
+| `hot_events` | 热点事件（小时桶统计，`keyword_id + hour_bucket` 唯一约束支持 upsert） |
 | `push_channels` | 推送渠道（Webhook URL） |
-| `push_records` | 推送状态与重试追踪 |
+| `push_records` | 推送状态与重试追踪（`hot_event_id + channel_id` 唯一约束） |
 
 ---
 
@@ -243,10 +275,12 @@ TrendAITool/
 - [x] 后端项目脚手架（Axum + SQLite + 配置解析）
 - [x] 数据库迁移与模型定义
 - [x] 认证中间件与 Token 管理 API
-- [ ] CRUD API（数据源、关键词、推送渠道）
-- [ ] Parser / Filter / Pusher 后台模块
-- [ ] 前端管理界面
-- [ ] Dashboard 可视化
+- [x] CRUD API（数据源、关键词、推送渠道）
+- [x] 查询 API（文章列表、热点列表、趋势数据、推送记录）
+- [x] Parser / Filter / Pusher 后台模块
+- [x] 事件驱动管道（mpsc 事件通道 + 定时器回退 + 手动触发端点）
+- [x] 前端管理界面（Electron + React + Ant Design）
+- [x] Dashboard 可视化（ECharts 趋势图表）
 
 ## License
 
