@@ -28,15 +28,15 @@ export interface UpdateKeywordRequest {
 }
 
 export const keywordApi = {
-  list: () => client.get<Keyword[]>('/keywords').then((r) => r.data),
+  list: () => client.get<{ data: Keyword[] }>('/keywords').then((r) => r.data.data),
 
-  get: (id: number) => client.get<Keyword>(`/keywords/${id}`).then((r) => r.data),
+  get: (id: number) => client.get<{ data: Keyword }>(`/keywords/${id}`).then((r) => r.data.data),
 
   create: (data: CreateKeywordRequest) =>
-    client.post<Keyword>('/keywords', data).then((r) => r.data),
+    client.post<{ data: Keyword }>('/keywords', data).then((r) => r.data.data),
 
   update: (id: number, data: UpdateKeywordRequest) =>
-    client.post<Keyword>(`/keywords/update/${id}`, data).then((r) => r.data),
+    client.post<{ data: Keyword }>(`/keywords/update/${id}`, data).then((r) => r.data.data),
 
   delete: (id: number) => client.post(`/keywords/delete/${id}`).then((r) => r.data)
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain, clipboard } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -56,6 +56,15 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
+
+  // Clipboard IPC handlers (sandbox preload cannot import electron.clipboard directly)
+  ipcMain.handle('clipboard:writeText', (_event, text: string) => {
+    clipboard.writeText(text)
+  })
+  ipcMain.handle('clipboard:readText', () => {
+    return clipboard.readText()
+  })
+
   createWindow()
 
   app.on('activate', () => {

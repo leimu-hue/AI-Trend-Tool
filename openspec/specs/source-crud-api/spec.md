@@ -93,6 +93,44 @@ The system SHALL expose `POST /api/v1/sources/{id}/fetch` to trigger an immediat
 - **WHEN** `POST /api/v1/sources/999/fetch` is called and no source with id=999 exists
 - **THEN** the response SHALL be HTTP 404
 
+### Requirement: Create source validates input
+
+The system SHALL validate input for `POST /api/v1/sources` before inserting into the database.
+
+#### Scenario: Empty name rejected
+
+- **WHEN** `POST /api/v1/sources` body contains `name` as empty string or whitespace-only
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "name must not be empty"}}`
+
+#### Scenario: Empty URL rejected
+
+- **WHEN** `POST /api/v1/sources` body contains `url` as empty string or whitespace-only
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "url must not be empty"}}`
+
+#### Scenario: Invalid URL scheme rejected
+
+- **WHEN** `POST /api/v1/sources` body contains `url` not starting with `http://` or `https://`
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "url must start with http:// or https://"}}`
+
+### Requirement: Update source validates input
+
+The system SHALL validate input for `POST /api/v1/sources/{id}/update` when fields are provided.
+
+#### Scenario: Non-empty name accepted
+
+- **WHEN** `POST /api/v1/sources/1/update` is called with `{"name": "Valid Name"}`
+- **THEN** the update SHALL proceed normally
+
+#### Scenario: Whitespace-only name rejected
+
+- **WHEN** `POST /api/v1/sources/1/update` is called with `{"name": "   "}`
+- **THEN** the response SHALL be HTTP 400
+
+#### Scenario: Invalid URL scheme rejected on update
+
+- **WHEN** `POST /api/v1/sources/1/update` is called with `{"url": "ftp://invalid.com"}`
+- **THEN** the response SHALL be HTTP 400
+
 ### Requirement: Source handlers follow project conventions
 
 Source handlers SHALL reside at `src/handlers/source.rs` and be declared via `pub mod source;` in `src/handlers.rs`. All SQL operations SHALL delegate to `src/db/source.rs` functions. Responses SHALL use `ApiResponse` for consistent wrapping.

@@ -32,14 +32,19 @@ export interface DashboardStats {
   active_hotspots: number
 }
 
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  per_page: number
+}
+
 export const queryApi = {
-  getHotspots: (params?: { limit?: number; offset?: number }) =>
-    client.get<HotEvent[]>('/hotspots', { params }).then((r) => r.data),
+  getHotspots: (params?: { page?: number; per_page?: number; keyword_id?: number }) =>
+    client.get<{ data: PaginatedResponse<HotEvent> }>('/hotspots', { params }).then((r) => r.data.data),
 
-  getArticles: (params?: { limit?: number; offset?: number; source_id?: number }) =>
-    client.get<Article[]>('/articles', { params }).then((r) => r.data),
+  getArticles: (params?: { page?: number; per_page?: number; source_id?: number; processed?: boolean }) =>
+    client.get<{ data: PaginatedResponse<Article> }>('/articles', { params }).then((r) => r.data.data),
 
-  getStats: () => client.get<DashboardStats>('/stats').then((r) => r.data),
-
-  triggerFilter: () => client.post('/filter/run').then((r) => r.data)
+  triggerFilter: () => client.post('/trigger/filter').then((r) => r.data)
 }

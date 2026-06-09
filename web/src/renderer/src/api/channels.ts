@@ -26,15 +26,15 @@ export interface UpdateChannelRequest {
 }
 
 export const channelApi = {
-  list: () => client.get<PushChannel[]>('/channels').then((r) => r.data),
+  list: () => client.get<{ data: PushChannel[] }>('/channels').then((r) => r.data.data),
 
-  get: (id: number) => client.get<PushChannel>(`/channels/${id}`).then((r) => r.data),
+  get: (id: number) => client.get<{ data: PushChannel }>(`/channels/${id}`).then((r) => r.data.data),
 
   create: (data: CreateChannelRequest) =>
-    client.post<PushChannel>('/channels', data).then((r) => r.data),
+    client.post<{ data: PushChannel }>('/channels', data).then((r) => r.data.data),
 
   update: (id: number, data: UpdateChannelRequest) =>
-    client.post<PushChannel>(`/channels/update/${id}`, data).then((r) => r.data),
+    client.post<{ data: PushChannel }>(`/channels/update/${id}`, data).then((r) => r.data.data),
 
   delete: (id: number) => client.post(`/channels/delete/${id}`).then((r) => r.data),
 

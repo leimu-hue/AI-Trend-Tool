@@ -32,15 +32,15 @@ export interface UpdateSourceRequest {
 }
 
 export const sourceApi = {
-  list: () => client.get<DataSource[]>('/sources').then((r) => r.data),
+  list: () => client.get<{ data: DataSource[] }>('/sources').then((r) => r.data.data),
 
-  get: (id: number) => client.get<DataSource>(`/sources/${id}`).then((r) => r.data),
+  get: (id: number) => client.get<{ data: DataSource }>(`/sources/${id}`).then((r) => r.data.data),
 
   create: (data: CreateSourceRequest) =>
-    client.post<DataSource>('/sources', data).then((r) => r.data),
+    client.post<{ data: DataSource }>('/sources', data).then((r) => r.data.data),
 
   update: (id: number, data: UpdateSourceRequest) =>
-    client.post<DataSource>(`/sources/update/${id}`, data).then((r) => r.data),
+    client.post<{ data: DataSource }>(`/sources/update/${id}`, data).then((r) => r.data.data),
 
   delete: (id: number) => client.post(`/sources/delete/${id}`).then((r) => r.data),
 

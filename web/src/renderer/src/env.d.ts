@@ -7,3 +7,21 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface ElectronClipboard {
+  writeText: (text: string) => Promise<void>
+  readText: () => Promise<string>
+}
+
+interface ElectronAPI {
+  platform: string
+  version: {
+    node: string
+    electron: string
+  }
+  clipboard: ElectronClipboard
+}
+
+interface Window {
+  electronAPI: ElectronAPI
+}

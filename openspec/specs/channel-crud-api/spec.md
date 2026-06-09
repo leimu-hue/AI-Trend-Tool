@@ -77,6 +77,44 @@ The system SHALL expose `POST /api/v1/channels/{id}/delete` to delete a push cha
 - **WHEN** `POST /api/v1/channels/999/delete` is called and no channel with id=999 exists
 - **THEN** the response SHALL be HTTP 404 with body `{"error": {"code": "NOT_FOUND", "message": "Channel 999 not found"}}`
 
+### Requirement: Create channel validates input
+
+The system SHALL validate input for `POST /api/v1/channels` before inserting into the database.
+
+#### Scenario: Empty name rejected
+
+- **WHEN** `POST /api/v1/channels` body contains `name` as empty string or whitespace-only
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "name must not be empty"}}`
+
+#### Scenario: Empty config rejected
+
+- **WHEN** `POST /api/v1/channels` body contains `config` as empty string or whitespace-only
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "config must not be empty"}}`
+
+#### Scenario: Invalid JSON config rejected
+
+- **WHEN** `POST /api/v1/channels` body contains `config` that is not valid JSON
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "config must be valid JSON"}}`
+
+#### Scenario: Valid JSON config accepted
+
+- **WHEN** `POST /api/v1/channels` is called with body `{"name": "DingTalk Alert", "config": "{\"url\": \"https://example.com/webhook\"}"}`
+- **THEN** the channel SHALL be created normally
+
+### Requirement: Update channel validates input
+
+The system SHALL validate input for `POST /api/v1/channels/{id}/update` when fields are provided.
+
+#### Scenario: Valid name accepted on update
+
+- **WHEN** `POST /api/v1/channels/1/update` is called with `{"name": "New Name"}`
+- **THEN** the update SHALL proceed normally
+
+#### Scenario: Invalid JSON config rejected on update
+
+- **WHEN** `POST /api/v1/channels/1/update` is called with `{"config": "not json"}`
+- **THEN** the response SHALL be HTTP 400
+
 ### Requirement: Channel handlers follow project conventions
 
 Channel handlers SHALL reside at `src/handlers/channel.rs` and be declared via `pub mod channel;` in `src/handlers.rs`. All SQL operations SHALL delegate to `src/db/channel.rs` functions. Responses SHALL use `ApiResponse` for consistent wrapping.

@@ -4,6 +4,10 @@ export interface ElectronAPI {
     node: string
     electron: string
   }
+  clipboard: {
+    writeText: (text: string) => Promise<void>
+    readText: () => Promise<string>
+  }
 }
 
 declare global {

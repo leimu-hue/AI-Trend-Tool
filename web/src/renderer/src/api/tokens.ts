@@ -23,10 +23,10 @@ export interface CreateTokenResponse {
 }
 
 export const tokenApi = {
-  list: () => client.get<TokenInfo[]>('/tokens').then((r) => r.data),
+  list: () => client.get<{ data: TokenInfo[] }>('/tokens').then((r) => r.data.data),
 
   create: (data: CreateTokenRequest) =>
-    client.post<CreateTokenResponse>('/tokens', data).then((r) => r.data),
+    client.post<{ data: CreateTokenResponse }>('/tokens', data).then((r) => r.data.data),
 
   revoke: (id: number) => client.post(`/tokens/revoke/${id}`).then((r) => r.data)
 }
