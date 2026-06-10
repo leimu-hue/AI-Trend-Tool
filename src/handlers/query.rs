@@ -146,6 +146,15 @@ pub async fn get_trend(
     Ok(ApiResponse::ok(resp))
 }
 
+// ── Settings handler ──
+
+/// GET /api/v1/settings — return current server configuration
+pub async fn get_settings(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    Ok(ApiResponse::ok(&state.config))
+}
+
 // ── Trigger handlers ──
 
 /// POST /api/v1/trigger/filter — manually run one filter iteration

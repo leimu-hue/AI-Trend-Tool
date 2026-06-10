@@ -1,16 +1,18 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct AppConfig {
     pub server: ServerConfig,
+    #[serde(skip_serializing)]
     pub database: DatabaseConfig,
+    #[serde(skip_serializing)]
     pub auth: AuthConfig,
     pub parser: ParserConfig,
     pub filter: FilterConfig,
     pub pusher: PusherConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
@@ -30,7 +32,7 @@ fn default_interval() -> u64 {
     30
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct ParserConfig {
     pub max_concurrent_fetches: usize,
     pub default_user_agent: String,
@@ -39,7 +41,7 @@ pub struct ParserConfig {
     pub interval_seconds: u64,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct FilterConfig {
     pub batch_size: u32,
     pub interval_seconds: u64,
@@ -47,7 +49,7 @@ pub struct FilterConfig {
     pub min_history_hours: u32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct PusherConfig {
     pub interval_seconds: u64,
     pub max_retries: u32,

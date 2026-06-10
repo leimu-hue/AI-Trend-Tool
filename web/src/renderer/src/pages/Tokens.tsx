@@ -73,11 +73,25 @@ export default function Tokens() {
     }
   }
 
-  async function handleCopy(text: string) {
-    try {
-      await window.electronAPI.clipboard.writeText(text)
+  function handleCopy(text: string) {
+    if (!text) {
+      toast.error('没有可复制的内容')
+      return
+    }
+    // 使用 textarea + execCommand —— 在 Electron 所有环境中可靠工作
+    // 避免 navigator.clipboard 在 contextIsolation 下 Promise resolve 但不写入剪贴板的问题
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0'
+    document.body.appendChild(ta)
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    if (ok) {
       toast.info('令牌已复制')
-    } catch {
+    } else {
       toast.error('复制失败')
     }
   }
@@ -144,20 +158,12 @@ export default function Tokens() {
                       {t.revoked ? (
                         <span style={{ color: 'var(--color-meta)', fontSize: 13 }}>—</span>
                       ) : (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => handleCopy(t.token || '')}
-                          >
-                            复制
-                          </button>
-                          <button
-                            className="btn btn-ghost btn-sm btn-danger"
-                            onClick={() => handleRevoke(t)}
-                          >
-                            吊销
-                          </button>
-                        </div>
+                        <button
+                          className="btn btn-ghost btn-sm btn-danger"
+                          onClick={() => handleRevoke(t)}
+                        >
+                          吊销
+                        </button>
                       )}
                     </td>
                   </tr>

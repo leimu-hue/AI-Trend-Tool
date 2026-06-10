@@ -21,6 +21,13 @@
 - [openspec/specs/trigger-apis/spec.md](file://openspec/specs/trigger-apis/spec.md)
 </cite>
 
+## 更新摘要
+**所做更改**
+- 更新并发请求处理部分，反映使用 futures::stream::for_each_concurrent 实现并发推送
+- 新增可配置最大重试限制章节，说明 max_retries 配置的作用和验证
+- 改进错误处理策略描述，强调配置验证和边界条件处理
+- 更新架构图和流程图以反映新的并发处理模式
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -41,6 +48,8 @@
 - PushRecord 数据模型：状态流转与生命周期
 - 推送渠道配置：URL 模板、请求头与认证方式
 - **事件驱动混合模式**：基于上游通知的响应式处理与固定轮询的结合
+- **并发请求处理**：使用 futures::stream::for_each_concurrent 实现受控并发推送
+- **可配置重试限制**：max_retries 配置确保重试不会无限循环
 - 错误处理策略、性能监控指标与故障恢复机制
 - 实际配置示例与最佳实践
 
@@ -112,11 +121,11 @@ DBC --> MC
 - [src/handlers/query.rs:166-172](file://src/handlers/query.rs#L166-L172)
 
 ## 核心组件
-- **推送器服务**：负责在事件驱动与固定轮询之间切换，构建 Webhook 请求、处理响应与失败重试、使用乐观锁更新状态。
+- **推送器服务**：负责在事件驱动与固定轮询之间切换，构建 Webhook 请求、处理响应与失败重试、使用乐观锁更新状态。**更新**：现支持并发请求处理，使用 for_each_concurrent 限制最大并发数。
 - **事件驱动管道**：通过 Pipeline 结构实现模块间通信，支持上游模块的即时通知与下游模块的快速响应。
 - **数据模型**：PushRecord 描述一次推送任务的元数据；PushChannel 描述推送渠道及其配置。
 - **数据访问层**：封装对 push_records、push_channels、hot_events、keywords 的查询与更新。
-- **配置系统**：PusherConfig 提供轮询间隔、最大重试次数、基础重试秒数等参数。
+- **配置系统**：PusherConfig 提供轮询间隔、最大重试次数、基础重试秒数等参数。**更新**：新增 max_retries 配置项，确保重试不会无限循环。
 - **触发接口**：手动触发一次推送迭代，便于调试与应急。
 
 **章节来源**
@@ -150,7 +159,7 @@ Loop->>Svc : "run_pusher_once(pool, config)"
 end
 Svc->>DB : "查询 pending 与 retry_due 记录"
 DB-->>Svc : "返回可推送记录集"
-loop 对每条记录
+loop 并发处理每条记录
 Svc->>DB : "lookup 渠道/热点事件/关键词"
 Svc->>Net : "POST Webhook URL(JSON 负载)"
 alt 响应成功
@@ -173,6 +182,50 @@ Note over Svc,Ch : "手动触发时同样调用 run_pusher_once"
 - [src/db/keyword.rs:33-38](file://src/db/keyword.rs#L33-L38)
 
 ## 详细组件分析
+
+### 并发请求处理
+**更新**：推送服务现使用 futures::stream::for_each_concurrent 实现受控并发处理，避免大量并发请求导致系统过载。
+
+- **并发控制机制**
+  - 使用 for_each_concurrent(8, ...) 限制最大并发请求数为 8
+  - 通过异步流处理每个推送记录，自动管理并发度
+  - 每个并发任务独立处理单条推送记录，互不影响
+- **性能优势**
+  - 显著提升推送吞吐量，特别是在网络 I/O 密集场景
+  - 避免过多并发连接导致的资源争用和性能下降
+  - 保持系统稳定性，防止突发流量造成服务崩溃
+- **错误隔离**
+  - 单个推送失败不会阻塞其他并发任务
+  - 每个任务独立的错误处理和重试逻辑
+  - 并发失败的统计和监控更加精确
+
+```mermaid
+flowchart TD
+Start(["开始处理推送记录"]) --> Concurrency["并发控制(最大8个并发)"]
+Concurrency --> Each["for_each_concurrent 处理每条记录"]
+Each --> Lookup["查询渠道/热点/关键词"]
+Lookup --> HasURL{"配置包含有效 URL?"}
+HasURL --> |否| FailSkip["标记失败(max_retries)，跳过重试"]
+HasURL --> |是| Build["构建 JSON 负载"]
+Build --> Post["POST 到 Webhook URL"]
+Post --> RespOK{"响应成功?"}
+RespOK --> |是| OptLock["乐观锁更新为 success"]
+OptLock --> Next["处理下一条记录"]
+RespOK --> |否| MarkFail["mark_failed(递增重试/计算下次重试)"]
+MarkFail --> Next
+FailSkip --> Next
+Next --> End(["并发处理完成"])
+```
+
+**图表来源**
+- [src/services/pusher.rs:39-45](file://src/services/pusher.rs#L39-L45)
+- [src/services/pusher.rs:48-204](file://src/services/pusher.rs#L48-L204)
+- [src/db/push_record.rs:87-109](file://src/db/push_record.rs#L87-L109)
+
+**章节来源**
+- [src/services/pusher.rs:39-45](file://src/services/pusher.rs#L39-L45)
+- [src/services/pusher.rs:48-204](file://src/services/pusher.rs#L48-L204)
+- [src/db/push_record.rs:87-109](file://src/db/push_record.rs#L87-L109)
 
 ### Webhook 推送机制
 - **请求构建**
@@ -214,12 +267,14 @@ FailSkip --> Done
   - 下次重试时间 = 当前时间 + 重试次数 × 基础秒数（线性增长，非指数）
   - 该实现以"步进式递增"替代指数退避，降低极端情况下的延迟放大效应。
 - **最大重试次数**
-  - 达到上限后不再安排下次重试（next_retry_at 设为 NULL）。
+  - **更新**：现在使用可配置的 max_retries 限制重试次数，防止无限重试循环
+  - 达到上限后不再安排下次重试（next_retry_at 设为 NULL）
+  - 配置验证确保 max_retries > 0，避免配置错误导致系统异常
 - **退避因子配置**
-  - 通过配置项 retry_base_seconds 控制每次递增的秒数。
-  - 通过配置项 max_retries 控制最大尝试次数。
+  - 通过配置项 retry_base_seconds 控制每次递增的秒数
+  - 通过配置项 max_retries 控制最大尝试次数
 - **重试触发条件**
-  - 查询失败且未达上限、且已到下次重试时间。
+  - 查询失败且未达上限、且已到下次重试时间
 
 ```mermaid
 flowchart TD
@@ -370,6 +425,7 @@ stateDiagram-v2
   - sqlx 用于 SQLite 访问
   - serde/serde_json 用于 JSON 解析与序列化
   - tokio::select! 用于多信号源协调
+  - **新增**：futures 库用于并发流处理
 - **可能的循环依赖**
   - 未发现直接循环导入；模块职责清晰
 
@@ -421,23 +477,30 @@ Handler --> Pusher
   - push_records 表对 status 建有索引，有利于快速筛选待处理与可重试记录
 - **并发控制**
   - 使用乐观锁减少写冲突带来的回滚与重试成本
+  - **新增**：并发请求处理限制最大并发数为 8，避免系统过载
 - **I/O 优化**
   - 单次迭代批量处理，减少数据库往返
+  - **新增**：并发流处理提升网络 I/O 吞吐量
 - **事件驱动优势**
   - 上游模块创建推送记录后立即触发，减少延迟
   - 非阻塞发送避免影响上游模块性能
 - **容量管理**
   - 通道容量 16 适合大多数场景，避免内存占用过大
   - 满通道时的非阻塞行为确保系统稳定性
+- **配置优化**
+  - **新增**：max_retries 配置确保重试不会无限循环
+  - 合理设置 retry_base_seconds 平衡重试频率与系统负载
 - **建议**
   - 若热点事件量级增大，可考虑分页或限流策略
   - 对外部 Webhook 的超时与并发连接数进行合理限制
+  - **新增**：根据系统资源调整并发数，避免过度并发导致性能下降
 
 **章节来源**
 - [docs/migrations/20260607044921_init.sql:117](file://docs/migrations/20260607044921_init.sql#L117)
 - [src/db/push_record.rs:45-63](file://src/db/push_record.rs#L45-L63)
 - [src/pipeline.rs:32-33](file://src/pipeline.rs#L32-L33)
 - [openspec/changes/event-driven-pipeline/specs/event-driven-pipeline/spec.md:33-37](file://openspec/changes/event-driven-pipeline/specs/event-driven-pipeline/spec.md#L33-L37)
+- [src/config.rs:50-55](file://src/config.rs#L50-L55)
 
 ## 故障排查指南
 - **常见问题与定位**
@@ -445,18 +508,24 @@ Handler --> Pusher
   - HTTP 非成功：查看响应状态码与目标服务日志
   - 网络错误：检查网络连通性与防火墙策略
   - 乐观锁失败：多个进程同时处理同一条记录，属并发正常现象
-  - 达到最大重试仍失败：确认目标服务是否可用，必要时调整 max_retries 或 retry_base_seconds
+  - **新增**：达到最大重试仍失败：确认目标服务是否可用，检查 max_retries 配置
+  - **新增**：并发处理异常：检查系统资源是否充足，适当降低并发数
   - 事件丢失：检查上游模块是否正确发送 PipelineEvent::NewData
   - 轮询失效：确认 interval_seconds 配置是否合理
 - **日志与可观测性**
   - 成功/失败/警告/错误级别日志已覆盖关键路径
   - 建议结合追踪系统（如 tracing）收集上下文信息
   - 监控事件驱动与轮询两种模式的执行频率
+  - **新增**：监控并发处理的吞吐量和错误率
 - **恢复机制**
   - 自动重试：基于 next_retry_at 与 retry_count 的组合
+  - **更新**：可配置重试限制确保系统稳定性
   - 事件驱动：上游模块创建推送记录后立即触发
   - 固定轮询：作为后备机制确保最终执行
   - 手动触发：通过 /api/v1/trigger/pusher 快速恢复
+- **配置验证**
+  - **新增**：max_retries 必须大于 0，系统启动时进行验证
+  - 配置错误会导致启动失败，需修正配置文件
 
 **章节来源**
 - [src/services/pusher.rs:48-204](file://src/services/pusher.rs#L48-L204)
@@ -464,17 +533,19 @@ Handler --> Pusher
 - [src/db/push_record.rs:87-109](file://src/db/push_record.rs#L87-L109)
 - [src/handlers/query.rs:166-172](file://src/handlers/query.rs#L166-L172)
 - [src/pipeline.rs:32-33](file://src/pipeline.rs#L32-L33)
+- [src/config.rs:86-87](file://src/config.rs#L86-L87)
 
 ## 结论
-本推送服务模块通过重大重构实现了从固定轮询到事件驱动混合模式的升级。新的 Pipeline 事件总线设计使得系统能够响应式地处理上游模块的通知，同时保留固定轮询作为可靠的后备机制。通过明确的配置项、清晰的状态机与乐观锁策略，系统在高并发场景下仍能保持稳定与可预测的行为。事件驱动模式显著降低了推送延迟，提高了系统的实时性和响应速度。
+本推送服务模块通过重大重构实现了从固定轮询到事件驱动混合模式的升级。新的 Pipeline 事件总线设计使得系统能够响应式地处理上游模块的通知，同时保留固定轮询作为可靠的后备机制。**最新更新**包括并发请求处理的引入，使用 futures::stream::for_each_concurrent 实现受控并发，显著提升了推送性能和系统稳定性。**可配置重试限制**确保系统在面对持续失败时不会陷入无限重试循环，增强了系统的健壮性。通过明确的配置项、清晰的状态机与乐观锁策略，系统在高并发场景下仍能保持稳定与可预测的行为。事件驱动模式显著降低了推送延迟，提高了系统的实时性和响应速度。
 
 ## 附录
 
 ### 配置项说明与示例
 - **[pusher] 配置**
   - interval_seconds：轮询间隔（秒）
-  - max_retries：最大重试次数
+  - max_retries：**新增**最大重试次数，必须大于 0
   - retry_base_seconds：每次重试递增量（秒）
+  - **新增**max_concurrent_fetches：**新增**最大并发请求数，默认 8
 - **示例**
   - 参考配置文件中的 [pusher] 段落
 
@@ -497,8 +568,10 @@ Handler --> Pusher
 - **重试策略**
   - 根据下游服务 SLA 调整 max_retries 与 retry_base_seconds
   - 对于瞬时故障与永久性错误，建议配合业务语义区分
+  - **新增**：合理设置 max_retries 防止无限重试
 - **并发与幂等**
   - 依赖乐观锁避免重复投递；前端展示以最终状态为准
+  - **新增**：根据系统资源调整并发数，避免过度并发
 - **事件驱动优化**
   - 合理设置 interval_seconds，平衡实时性与资源消耗
   - 监控事件丢失率，确保上游模块正确发送通知
@@ -507,3 +580,7 @@ Handler --> Pusher
   - 关注失败率、平均重试次数、最长等待时间等指标
   - 对连续失败或超时进行告警
   - 监控事件驱动与轮询两种模式的执行效率
+  - **新增**：监控并发处理性能和错误率
+- **配置验证**
+  - **新增**：确保 max_retries > 0，避免系统异常
+  - 启动时进行配置验证，及时发现配置错误

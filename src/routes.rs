@@ -46,6 +46,7 @@ pub fn create_router(pool: SqlitePool, config: AppConfig, pipeline: Pipeline) ->
         .route("/hotspots", get(query::list_hotspots))
         .route("/hotspots/{id}/push-records", get(query::get_push_records))
         .route("/trend/{keyword_id}", get(query::get_trend))
+        .route("/settings", get(query::get_settings))
         // System control
         .route("/trigger/filter", post(query::trigger_filter))
         .route("/trigger/pusher", post(query::trigger_pusher))
