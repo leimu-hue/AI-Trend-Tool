@@ -25,10 +25,18 @@ pub async fn ensure_initial_token(
     let count = db::token::count_all_tokens(pool).await?;
 
     if count > 0 {
-        // Tokens already exist — print the first non-revoked one for convenience
+        // Tokens already exist — print masked form of the first non-revoked one
         if let Some(token) = db::token::get_first_active_token(pool).await? {
+            let t = &token.token;
+            let masked = if t.len() > 8 {
+                format!("{}...{}", &t[..4], &t[t.len() - 4..])
+            } else if t.len() > 4 {
+                format!("{}...", &t[..4])
+            } else {
+                "***".to_string()
+            };
             tracing::info!("============================================");
-            tracing::info!("  Active token: {}", token.token);
+            tracing::info!("  Active token: {}", masked);
             tracing::info!("  ({} token(s) total in database)", count);
             tracing::info!("============================================");
         }

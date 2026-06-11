@@ -1,10 +1,11 @@
 use chrono::NaiveDateTime;
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use crate::models::push_record::PushRecord;
 
 /// Insert push records for all enabled channels for a given hot event.
 /// Skips channels that already have a record (UNIQUE constraint).
+#[allow(dead_code)]
 pub async fn insert_push_records_for_event(
     pool: &SqlitePool,
     hot_event_id: i64,
@@ -18,6 +19,28 @@ pub async fn insert_push_records_for_event(
         .bind(hot_event_id)
         .bind(channel_id)
         .fetch_optional(pool)
+        .await
+        {
+            records.push(r);
+        }
+    }
+    Ok(records)
+}
+
+/// Transaction-aware version of insert_push_records_for_event.
+pub async fn insert_push_records_for_event_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    hot_event_id: i64,
+    channel_ids: &[i64],
+) -> Result<Vec<PushRecord>, sqlx::Error> {
+    let mut records = vec![];
+    for &channel_id in channel_ids {
+        if let Ok(Some(r)) = sqlx::query_as::<_, PushRecord>(
+            "INSERT OR IGNORE INTO push_records (hot_event_id, channel_id) VALUES (?, ?) RETURNING *",
+        )
+        .bind(hot_event_id)
+        .bind(channel_id)
+        .fetch_optional(&mut **tx)
         .await
         {
             records.push(r);

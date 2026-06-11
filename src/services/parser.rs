@@ -39,7 +39,9 @@ impl RssParser {
     pub fn new(config: &ParserConfig) -> Self {
         let client = reqwest::Client::builder()
             .user_agent(&config.default_user_agent)
-            .timeout(std::time::Duration::from_secs(config.default_timeout_seconds))
+            .timeout(std::time::Duration::from_secs(
+                config.default_timeout_seconds,
+            ))
             .build()
             .expect("Failed to build reqwest client");
         Self { client }

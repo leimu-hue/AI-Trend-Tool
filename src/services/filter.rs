@@ -117,9 +117,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     }
 
     if !mentions.is_empty() {
-        if let Err(e) =
-            db::keyword_mention::batch_insert_keyword_mentions(pool, &mentions).await
-        {
+        if let Err(e) = db::keyword_mention::batch_insert_keyword_mentions(pool, &mentions).await {
             tracing::error!("Filter: batch insert keyword_mentions failed: {}", e);
         }
     }
@@ -159,6 +157,15 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
         *kw_hours.entry(*kw_id).or_insert(0) += 1;
     }
 
+    // Begin transaction for hot_event upsert + push_record insert atomicity
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::error!("Filter: failed to begin transaction: {}", e);
+            return false;
+        }
+    };
+
     let mut created_push = false;
 
     for kw in &keywords {
@@ -183,21 +190,27 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             .unwrap_or((0.0, 0.0));
 
         // Record the hourly count in hot_events (upsert for idempotency)
-        let hot_event =
-            match upsert_hot_event_record(pool, kw.id, &current_hour, current_count, mean, stddev)
-                .await
-            {
-                Ok(he) => he,
-                Err(e) => {
-                    tracing::error!(
-                        "Filter: failed to upsert hot_event (kw={}, hour={}): {}",
-                        kw.id,
-                        current_hour,
-                        e
-                    );
-                    continue;
-                }
-            };
+        let hot_event = match upsert_hot_event_record(
+            &mut tx,
+            kw.id,
+            &current_hour,
+            current_count,
+            mean,
+            stddev,
+        )
+        .await
+        {
+            Ok(he) => he,
+            Err(e) => {
+                tracing::error!(
+                    "Filter: failed to upsert hot_event (kw={}, hour={}): {}",
+                    kw.id,
+                    current_hour,
+                    e
+                );
+                continue;
+            }
+        };
 
         // Burst detection: is current_count above threshold?
         let has_enough_history = kw_hours
@@ -222,8 +235,12 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             );
 
             let channel_ids: Vec<i64> = enabled_channels.iter().map(|c| c.id).collect();
-            match db::push_record::insert_push_records_for_event(pool, hot_event.id, &channel_ids)
-                .await
+            match db::push_record::insert_push_records_for_event_tx(
+                &mut tx,
+                hot_event.id,
+                &channel_ids,
+            )
+            .await
             {
                 Ok(_) => created_push = true,
                 Err(e) => {
@@ -237,17 +254,25 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
         }
     }
 
-    // 6. Mark articles as processed
-    if let Err(e) = db::article::mark_processed_batch(pool, &article_ids).await {
-        tracing::error!("Filter: failed to mark articles processed: {}", e);
+    // Commit the transaction before marking articles processed
+    if let Err(e) = tx.commit().await {
+        tracing::error!("Filter: failed to commit transaction: {}", e);
+        return false;
+    }
+
+    // 6. Mark articles as processed (after successful commit)
+    if !article_ids.is_empty() {
+        if let Err(e) = db::article::mark_processed_batch(pool, &article_ids).await {
+            tracing::error!("Filter: failed to mark articles processed: {}", e);
+        }
     }
 
     created_push
 }
 
-/// Upsert a hot_event record using ON CONFLICT for atomic idempotency.
+/// Upsert a hot_event record inside a transaction.
 async fn upsert_hot_event_record(
-    pool: &SqlitePool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     keyword_id: i64,
     hour_bucket: &str,
     count: i32,
@@ -268,7 +293,7 @@ async fn upsert_hot_event_record(
     .bind(count)
     .bind(mean_historical)
     .bind(stddev_historical)
-    .fetch_one(pool)
+    .fetch_one(&mut **tx)
     .await
 }
 

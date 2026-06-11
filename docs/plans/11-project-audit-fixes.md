@@ -168,37 +168,12 @@ pub async fn insert_initial_token(
 
 ---
 
-## Task 4: [P1 Bug] 前端 401 重定向使用 hash 赋值导致路由不跳转
+## Task 4: ~~[P1 Bug] 前端 401 重定向使用 hash 赋值导致路由不跳转~~ — 无需修复
 
-### 问题
+### 结论
 
-`web/src/renderer/src/api/client.ts` 第 33 行：
-
-```ts
-window.location.hash = '#/auth'
-```
-
-项目使用 `react-router-dom` 的 `BrowserRouter`（基于 History API），hash 赋值不会触发 BrowserRouter 的路由匹配，
-导致 401 后页面不会跳转到认证页。
-
-### 修复方案
-
-**文件: `web/src/renderer/src/api/client.ts`**
-
-改用 `window.location.href` 或 `window.location.replace` 进行整页跳转到 `/auth`：
-
-```ts
-if (error.response.status === 401) {
-    localStorage.removeItem('api_token')
-    window.location.replace('/auth')
-    return Promise.reject(error)
-}
-```
-
-> **备注**：由于 Electron 使用 `file://` 协议加载页面，`window.location.replace` 可能不适用。
-> 需要确认 Electron 的路由模式。如果是 `HashRouter`，则原来的 hash 赋值是正确的；
-> 如果是 `MemoryRouter` 或其他，需通过 IPC 通知主进程跳转。
-> 建议先确认 `App.tsx` 中使用的 Router 类型再做最终修改。
+项目使用 `HashRouter`（见 `web/src/renderer/src/main.tsx`），`window.location.hash = '#/auth'` 是正确的跳转方式，
+401 后能正常触发路由匹配跳转到认证页。**此条非 Bug，无需修改。**
 
 ---
 
@@ -671,6 +646,530 @@ const perPage = 20
 
 ---
 
+## ─── 以下为第二轮审查新增 ───
+
+---
+
+## Task 13: [P0 数据一致性] Filter 处理流程缺乏事务保护
+
+### 问题
+
+`src/services/filter.rs` 第 186-245 行，`run_filter_once` 的三个关键写操作
+（upsert hot_event → insert push_records → mark_articles_processed）没有在一个数据库事务中执行。
+
+如果 upsert hot_event 成功，但 insert_push_records 失败（如磁盘满），
+随后第 241 行仍然会把所有文章标记为 `processed`。
+
+**后果**：
+- 文章被标记为已处理，永远不会被重新处理
+- hot_event 记录存在，但没有对应的 push_records
+- 该批次的热点数据永久丢失，无法恢复
+
+### 修复方案
+
+**文件: `src/services/filter.rs`**
+
+将步骤 5-6 的写操作包裹在事务中，只在全部成功后 commit：
+
+```rust
+let mut tx = pool.begin().await?;
+// ... upsert hot_events, insert push_records 使用 &mut *tx ...
+tx.commit().await?;
+// 事务提交成功后才标记文章为已处理
+db::article::mark_processed_batch(pool, &article_ids).await?;
+```
+
+---
+
+## Task 14: [P0 数据一致性] keyword_mentions 表缺少 UNIQUE 约束
+
+### 问题
+
+`docs/migrations/20260607044921_init.sql` 中 `keyword_mentions` 表没有 `(keyword_id, article_id)` 的 UNIQUE 约束。
+但 `batch_insert_keyword_mentions` 使用 `INSERT OR IGNORE`，该语句只在违反 UNIQUE/PRIMARY KEY 约束时静默忽略。
+
+由于没有约束，**每次 filter 运行都会为同一 (keyword_id, article_id) 对插入重复记录**，
+导致表无限膨胀。
+
+### 修复方案
+
+#### 14a. 新建迁移文件
+
+**新建文件: `docs/migrations/20260610000002_mentions_unique_index.sql`**
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mentions_unique
+    ON keyword_mentions(keyword_id, article_id);
+```
+
+#### 14b. 清理已有重复数据（可选）
+
+可在迁移中先清理重复行（保留最早的一条）：
+
+```sql
+DELETE FROM keyword_mentions WHERE id NOT IN (
+    SELECT MIN(id) FROM keyword_mentions GROUP BY keyword_id, article_id
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mentions_unique
+    ON keyword_mentions(keyword_id, article_id);
+```
+
+---
+
+## Task 15: [P0 功能] 生产环境 CSP `connect-src` 端口与后端不匹配
+
+### 问题
+
+`web/src/main/index.ts` 第 48 行，生产环境 CSP 设置为 `connect-src 'self' http://localhost:8080`，但：
+- 页面通过 `file://` 协议加载，`'self'` 不覆盖 HTTP 请求
+- 后端实际监听端口为 **3000**（`config.toml`），而非 8080
+- 开发环境 CSP 正确使用了 `http://localhost:*` 通配符
+
+**结果**：生产环境所有 API 调用会被 CSP 拦截，应用完全不可用。
+
+### 修复方案
+
+**文件: `web/src/main/index.ts`**
+
+```ts
+// 当前:
+"connect-src 'self' http://localhost:8080"
+
+// 修复 — 使用通配符匹配任意端口:
+"connect-src 'self' http://localhost:*"
+```
+
+---
+
+## Task 16: [P0 功能] axios 客户端默认 baseURL 与后端端口不匹配
+
+### 问题
+
+`web/src/renderer/src/api/client.ts` 第 12 行，`baseURL` fallback 硬编码为 `http://localhost:8080/api/v1`，
+但后端 `config.toml` 默认端口为 `3000`。
+
+- `.env.development` 正确指向 `http://localhost:3000/api/v1`
+- 生产构建无 `.env.production`，`import.meta.env.VITE_API_BASE_URL` 为 `undefined`，走 fallback
+
+**结果**：生产环境 API 请求指向错误端口。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/api/client.ts`**
+
+```ts
+// 当前:
+baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
+
+// 修复 — 与后端默认端口一致:
+baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1',
+```
+
+> **备注**：Settings 页面 `web/src/renderer/src/pages/Settings.tsx` 第 47 行
+> `port: 8080` 也应同步改为 `port: 3000`。
+
+---
+
+## Task 17: [P1 Bug] Pusher 定时器与事件驱动并发触发 — Webhook 重复发送
+
+### 问题
+
+`src/services/pusher.rs` 第 261-286 行，`start_pusher_loop` 使用 `tokio::select!` 同时监听定时器和事件通道。
+当 `run_filter_once` 完成后通过 `try_send` 通知 Pusher，但在 Pusher 处理 webhook 发送（网络 I/O）期间，
+定时器 tick 可能触发新一轮 `run_pusher_once`，此时上一轮还未更新状态为 "success"。
+
+**竞态窗口**：
+
+```
+run_pusher_once(A): SELECT pending records → [record #1 pending]
+run_pusher_once(A): POST webhook (2 seconds)    ← 此时 interval.tick() 触发
+run_pusher_once(B): SELECT pending records → [record #1 STILL pending!]
+run_pusher_once(B): POST webhook (DUPLICATE!)
+run_pusher_once(A): UPDATE status → success
+run_pusher_once(B): UPDATE status → optimistic lock fails (warn logged)
+```
+
+**结果**：外部服务（钉钉、企业微信、Slack 等）收到重复的热点告警消息。
+
+### 修复方案
+
+**文件: `src/services/pusher.rs`**
+
+在 `run_pusher_once` 开始前，使用原子 UPDATE "领取"待处理记录：
+
+```rust
+// 先将 pending → processing（原子领取），只处理标记为 processing 的记录
+sqlx::query("UPDATE push_records SET status = 'processing' \
+             WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))")
+    .execute(pool).await?;
+// 然后 SELECT ... WHERE status = 'processing'
+```
+
+---
+
+## Task 18: [P1 Bug] 分页 per_page 响应值与数据库实际限制不匹配
+
+### 问题
+
+`src/handlers/query.rs` 第 49-71 行（articles）和第 75-96 行（hotspots）。
+
+`list_articles` handler 中，`per_page` 直接取用户传入值（如 200），
+而 `db::article::list_articles` 内部 clamp 到 max 100。
+但 `PaginatedResponse` 返回的是用户原始值 200，而非实际的 100。
+
+**影响**：假设总共 250 条，用户请求 `per_page=200`：
+- DB 返回 100 条（被 clamp），响应 `per_page: 200`
+- 客户端计算 `ceil(250/200) = 2` 页，但实际需要 3 页
+- **第 201-250 条数据永远无法被访问到**
+
+### 修复方案
+
+**文件: `src/handlers/query.rs`**
+
+在 handler 层面先 clamp，再传入 DB 层和响应：
+
+```rust
+// list_articles:
+let per_page = query.per_page.unwrap_or(20).min(100);
+let query = ArticleQuery { per_page: Some(per_page), ..query };
+
+// list_hotspots 同理:
+let per_page = params.per_page.unwrap_or(20).min(100);
+```
+
+---
+
+## Task 19: [P1 Bug] `insert_push_records_for_event` 静默吞掉数据库错误
+
+### 问题
+
+`src/db/push_record.rs` 中 `INSERT OR IGNORE` 会忽略**所有**类型的 SQLite 错误（不仅是 UNIQUE 冲突），
+包括磁盘满、外键违反等。`if let Ok(Some(r))` 模式把所有错误静默忽略，无任何日志。
+
+**结果**：如果 `channel_id` 引用了已删除的 channel（FK 违反），记录静默丢失，调用方不收到通知。
+
+### 修复方案
+
+**文件: `src/db/push_record.rs`**
+
+区分 `Ok(None)`（UNIQUE 冲突，正常跳过）和 `Err(e)`（真正错误，应记录日志）：
+
+```rust
+match sqlx::query_as::<_, PushRecord>(
+    "INSERT OR IGNORE INTO push_records ... RETURNING *"
+)
+.bind(hot_event_id)
+.bind(channel_id)
+.fetch_optional(pool)
+.await
+{
+    Ok(Some(r)) => records.push(r),
+    Ok(None) => {} // duplicate, skip
+    Err(e) => {
+        tracing::error!("Failed to insert push record for channel {}: {}", channel_id, e);
+    }
+}
+```
+
+---
+
+## Task 20: [P1 Bug] Settings 页面 fallback 默认值与后端配置不匹配
+
+### 问题
+
+`web/src/renderer/src/pages/Settings.tsx` 第 27-48 行，当 API 请求失败时页面显示前端硬编码的 `DEFAULTS`，
+但多个值与 `config.toml` 不一致：
+
+| 字段 | DEFAULTS (前端) | config.toml (后端) |
+|------|-----------------|-------------------|
+| `max_concurrent_fetches` | 5 | **10** |
+| `batch_size` | 100 | **1000** |
+| `server.port` | 8080 | **3000** |
+
+### 修复方案
+
+**文件: `web/src/renderer/src/pages/Settings.tsx`**
+
+更新 DEFAULTS 对象使其与 `config.toml` 一致：
+
+```ts
+const DEFAULTS = {
+  server: { host: '0.0.0.0', port: 3000 },
+  parser: { max_concurrent_fetches: 10, /* ... */ },
+  filter: { batch_size: 1000, /* ... */ },
+  // ...
+}
+```
+
+---
+
+## Task 21: [P1 内存泄漏] Toast 组件嵌套 setTimeout 卸载时无法清理
+
+### 问题
+
+`web/src/renderer/src/components/Toast.tsx` 第 40-43 行，`show` 方法创建嵌套 `setTimeout`
+（外层 duration 后触发退出动画，内层 300ms 后移除 DOM）。
+
+当 `ToastProvider` 卸载时（如 HMR 热重载），这些定时器不会被清除，
+会对已卸载组件调用 `setToasts`，造成内存泄漏和 React 警告。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/components/Toast.tsx`**
+
+用 `useRef` 收集所有 timer ID，在组件 cleanup 中统一 `clearTimeout`：
+
+```tsx
+const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+
+// show 方法中:
+const t1 = setTimeout(() => { /* ... */ }, duration)
+const t2 = setTimeout(() => { /* ... */ }, duration + 300)
+timersRef.current.add(t1)
+timersRef.current.add(t2)
+
+// useEffect cleanup:
+useEffect(() => {
+  return () => {
+    timersRef.current.forEach(clearTimeout)
+  }
+}, [])
+```
+
+---
+
+## Task 22: [P1 误导] Layout 页脚文案声称"每5分钟自动刷新"但无实际逻辑
+
+### 问题
+
+`web/src/renderer/src/components/Layout.tsx` 第 162 行，侧边栏底部固定显示
+`"监控中 · 每5分钟自动刷新"`，但代码中没有任何定时数据刷新机制。
+各页面仅在 `useEffect` 中加载一次数据，之后不会自动刷新。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/components/Layout.tsx`**
+
+方案 A — 移除误导性文案：
+
+```tsx
+// 当前: "监控中 · 每5分钟自动刷新"
+// 修复: "监控中" 或 "后端监控运行中"
+```
+
+方案 B — 实际实现定时轮询（推荐后续迭代）。
+
+---
+
+## Task 23: [P2 可靠性] Parser spawn 的子任务未被跟踪 — 关闭时可能丢失数据
+
+### 问题
+
+`src/services/parser.rs` 为每个到期数据源 `tokio::spawn` 一个独立任务，但没有收集 `JoinHandle`。
+当 Ctrl+C 触发取消时，parser loop 退出，但已 spawn 的 fetch 子任务仍在运行。
+`main.rs` 的 `tokio::join!` 只等待 `start_parser_loop` 返回，**不等待其内部 spawn 的子任务**。
+
+**结果**：正在进行的 RSS 抓取和文章插入可能在写入过程中被强制终止。
+
+### 修复方案
+
+**文件: `src/services/parser.rs`**
+
+使用 `JoinSet` 或 `Vec<JoinHandle>` 跟踪子任务，在 cancel 信号后 await 所有进行中的任务：
+
+```rust
+let mut tasks = tokio::task::JoinSet::new();
+// spawn 时:
+tasks.spawn(async move { fetch_source(...).await });
+// cancel 后:
+while let Some(_) = tasks.join_next().await {}
+```
+
+---
+
+## Task 24: [P2 性能] DB 连接池大小 (5) < Parser 并发任务数 (10)
+
+### 问题
+
+`src/db.rs` 中 `max_connections(5)`，但 `config.toml` 中 `max_concurrent_fetches = 10`。
+每个 fetch 任务需要多次 DB 操作，当 10 个任务同时运行时只有 5 个能获得连接，
+其余排队等待，实际并发度受限于 5。
+
+### 修复方案
+
+**文件: `src/db.rs`**
+
+将 `max_connections` 设为 `>= max_concurrent_fetches + 5`（额外预留给 filter/pusher/API）：
+
+```rust
+.max_connections(std::cmp::max(config_max_concurrent_fetches as u32 + 5, 10))
+```
+
+或改为从 config 中读取：
+
+```rust
+.max_connections(config.database.max_connections.unwrap_or(15))
+```
+
+---
+
+## Task 25: [P2 Bug] `hours` 参数 i64→i32 类型截断无校验
+
+### 问题
+
+`src/handlers/query.rs` 第 133-134 行：
+
+```rust
+let hours = params.hours.unwrap_or(24);
+let rows = db::hot_event::get_hourly_counts(&state.pool, keyword_id, hours as i32).await?;
+```
+
+如果用户传入 `hours=2147483648`（超过 i32::MAX），`as i32` 静默截断为负数，
+导致 SQL 查询异常。
+
+### 修复方案
+
+**文件: `src/handlers/query.rs`**
+
+```rust
+let hours = params.hours.unwrap_or(24).clamp(1, 8760) as i32; // max 1 year
+```
+
+---
+
+## Task 26: [P2 Bug] `main.rs` 中 DB 路径 `unwrap()` 可能 panic
+
+### 问题
+
+`src/main.rs` 第 66-68 行：
+
+```rust
+let db_dir = std::path::Path::new(&config.database.path)
+    .parent()
+    .unwrap();
+```
+
+当 `database.path` 为根路径 `"/"` 时，`parent()` 返回 `None`，`unwrap()` panic。
+虽然 `config.validate()` 检查了 `path.is_empty()`，但 `"/"` 边界情况未覆盖。
+
+### 修复方案
+
+**文件: `src/main.rs`**
+
+```rust
+let db_dir = std::path::Path::new(&config.database.path)
+    .parent()
+    .ok_or("database.path has no valid parent directory")?;
+```
+
+---
+
+## Task 27: [P2 安全] ErrorBoundary 向用户暴露原始错误消息
+
+### 问题
+
+`web/src/renderer/src/components/ErrorBoundary.tsx` 第 34 行，
+`this.state.error?.message` 直接显示给用户，可能包含内部实现细节（堆栈片段、变量名等）。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/components/ErrorBoundary.tsx`**
+
+使用通用错误提示，详细错误仅输出到 `console.error`：
+
+```tsx
+console.error('ErrorBoundary caught:', this.state.error)
+// UI 显示: "页面发生了未知错误，请刷新页面重试"
+```
+
+---
+
+## Task 28: [P2 代码卫生] Tokens 页面使用已废弃的 `document.execCommand('copy')`
+
+### 问题
+
+`web/src/renderer/src/pages/Tokens.tsx` 第 83-96 行使用 `document.execCommand('copy')`。
+虽然注释说明了 contextIsolation 下的兼容考虑，但 preload 脚本已暴露了
+`window.electronAPI.clipboard.writeText()` IPC 桥接，应优先使用。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/pages/Tokens.tsx`**
+
+```tsx
+// 当前: document.execCommand('copy')
+// 修复: 使用 preload 暴露的 IPC 桥接
+await window.electronAPI.clipboard.writeText(tokenStr)
+```
+
+---
+
+## Task 29: [P2 代码卫生] `useApi` hook 和 `Loading` 组件为死代码
+
+### 问题
+
+- `web/src/renderer/src/hooks/useApi.ts` — 未被任何模块引用
+- `web/src/renderer/src/components/Loading.tsx` — 未被任何模块引用
+- `useApi` 内部引用的 `useNotify` 也仅被 `useApi` 使用
+
+三者构成完整的死代码链。
+
+### 修复方案
+
+删除以下文件：
+- `web/src/renderer/src/hooks/useApi.ts`
+- `web/src/renderer/src/components/Loading.tsx`
+
+并从 `lib/notification.ts` 中移除仅被 `useApi` 使用的 `useNotify` hook（如确认无其他引用）。
+
+---
+
+## Task 30: [P2 安全] preload 暴露了未使用的 `clipboard.readText`
+
+### 问题
+
+`web/src/preload/index.ts` 第 11 行暴露了 `clipboard.readText`，
+但应用中只有 `clipboard.writeText` 被使用（Tokens 页面）。
+根据 Electron 最小权限原则，应移除不必要的 API 暴露。
+
+### 修复方案
+
+**文件: `web/src/preload/index.ts`**
+
+移除 `clipboard.readText` 的 contextBridge 暴露：
+
+```ts
+// 移除:
+// clipboard: { readText: () => ipcRenderer.invoke('clipboard:read') }
+```
+
+同时移除 `web/src/main/index.ts` 中对应的 `ipcMain.handle('clipboard:read', ...)` 处理。
+
+---
+
+## Task 31: [P2 可靠性] `notification.ts` 模块级缓存无清理机制
+
+### 问题
+
+`web/src/renderer/src/lib/notification.ts` 第 30-34 行，`contextApi` 为模块级变量，
+由 `useNotificationBridge` 写入但永远不会被清理。
+如果 `App` 组件卸载（HMR 或热重载），`contextApi` 仍指向旧的、可能已失效的实例。
+
+### 修复方案
+
+**文件: `web/src/renderer/src/lib/notification.ts`**
+
+在 `useNotificationBridge` 的 `useEffect` 中添加 cleanup：
+
+```tsx
+useEffect(() => {
+  setNotificationApi(notification)
+  return () => setNotificationApi(null) // 需修改 setNotificationApi 允许 null
+}, [notification])
+```
+
+---
+
 ## 执行优先级汇总
 
 | 优先级 | Task | 类型 | 涉及文件 |
@@ -678,12 +1177,31 @@ const perPage = 20
 | P0 | Task 1 | 安全 | `src/main.rs` |
 | P0 | Task 2 | 安全 | `src/routes.rs` |
 | P0 | Task 3 | 安全 | `src/db/token.rs`, 新建迁移 |
-| P1 | Task 4 | Bug | `web/.../api/client.ts` |
+| P0 | Task 13 | 数据一致性 | `src/services/filter.rs` |
+| P0 | Task 14 | 数据一致性 | 新建迁移 |
+| P0 | Task 15 | 功能 | `web/src/main/index.ts` |
+| P0 | Task 16 | 功能 | `web/.../api/client.ts`, `web/.../pages/Settings.tsx` |
+| P1 | Task 4 | Bug | `web/.../api/client.ts` — **无需修复** |
 | P1 | Task 5 | Bug | `src/db/source.rs`, `src/handlers/source.rs` |
 | P1 | Task 6 | 性能 | `src/services/pusher.rs`, `src/handlers/query.rs` |
 | P1 | Task 7 | 配置 | `config.toml`, `.gitignore` |
+| P1 | Task 17 | Bug | `src/services/pusher.rs` |
+| P1 | Task 18 | Bug | `src/handlers/query.rs` |
+| P1 | Task 19 | Bug | `src/db/push_record.rs` |
+| P1 | Task 20 | Bug | `web/.../pages/Settings.tsx` |
+| P1 | Task 21 | 内存泄漏 | `web/.../components/Toast.tsx` |
+| P1 | Task 22 | 误导 | `web/.../components/Layout.tsx` |
 | P2 | Task 8 | 改进 | `Cargo.toml`, `src/models/*.rs`, `src/handlers/*.rs`, `src/error.rs` |
 | P2 | Task 9 | 改进 | `web/.../pages/Auth.tsx` |
 | P2 | Task 10 | 改进 | `src/main.rs` |
 | P2 | Task 11 | 改进 | `src/config.rs`, `src/error.rs`, `src/services/filter.rs` |
 | P2 | Task 12 | 改进 | `web/.../pages/Articles.tsx` |
+| P2 | Task 23 | 可靠性 | `src/services/parser.rs` |
+| P2 | Task 24 | 性能 | `src/db.rs` |
+| P2 | Task 25 | Bug | `src/handlers/query.rs` |
+| P2 | Task 26 | Bug | `src/main.rs` |
+| P2 | Task 27 | 安全 | `web/.../components/ErrorBoundary.tsx` |
+| P2 | Task 28 | 代码卫生 | `web/.../pages/Tokens.tsx` |
+| P2 | Task 29 | 代码卫生 | `web/.../hooks/useApi.ts`, `web/.../components/Loading.tsx` |
+| P2 | Task 30 | 安全 | `web/src/preload/index.ts`, `web/src/main/index.ts` |
+| P2 | Task 31 | 可靠性 | `web/.../lib/notification.ts` |

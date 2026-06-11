@@ -18,15 +18,18 @@ pub async fn create_token(
     expires_at: Option<NaiveDateTime>,
 ) -> Result<ApiToken, sqlx::Error> {
     let token_hash = hash_token(token);
-    sqlx::query_as::<_, ApiToken>(
+    let mut row = sqlx::query_as::<_, ApiToken>(
         "INSERT INTO api_tokens (name, token, token_hash, expires_at) VALUES (?, ?, ?, ?) RETURNING *",
     )
     .bind(name)
-    .bind(token)
+    .bind("***REDACTED***")
     .bind(token_hash)
     .bind(expires_at)
     .fetch_one(pool)
-    .await
+    .await?;
+    // Return the real token to the caller — database stores only the placeholder.
+    row.token = token.to_string();
+    Ok(row)
 }
 
 pub async fn list_tokens(pool: &SqlitePool) -> Result<Vec<ApiToken>, sqlx::Error> {
@@ -48,12 +51,10 @@ pub async fn get_token_by_hash(
     pool: &SqlitePool,
     token: &str,
 ) -> Result<Option<ApiToken>, sqlx::Error> {
-    sqlx::query_as::<_, ApiToken>(
-        "SELECT * FROM api_tokens WHERE token_hash = ? AND revoked = 0",
-    )
-    .bind(token)
-    .fetch_optional(pool)
-    .await
+    sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE token_hash = ? AND revoked = 0")
+        .bind(token)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn update_token_last_used(pool: &SqlitePool, id: i64) -> Result<(), sqlx::Error> {
@@ -96,7 +97,7 @@ pub async fn insert_initial_token(
     let token_hash = hash_token(token);
     sqlx::query("INSERT INTO api_tokens (name, token, token_hash) VALUES (?, ?, ?)")
         .bind(name)
-        .bind(token)
+        .bind("***REDACTED***")
         .bind(token_hash)
         .execute(pool)
         .await?;

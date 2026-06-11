@@ -1,12 +1,13 @@
 use axum::{
     extract::State,
+    http::Method,
     middleware,
     routing::{get, post},
     Json, Router,
 };
 use serde_json::json;
 use sqlx::SqlitePool;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::AppConfig;
 use crate::handlers::{channel, keyword, query, source, token};
@@ -60,12 +61,21 @@ pub fn create_router(pool: SqlitePool, config: AppConfig, pipeline: Pipeline) ->
         .route("/health", get(health_check))
         .nest("/api/v1", api)
         .with_state(state)
-        .layer(CorsLayer::permissive())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
+                .allow_headers(Any),
+        )
 }
 
-async fn health_check(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn health_check(State(state): State<AppState>) -> Json<serde_json::Value> {
     let db_status = match sqlx::query("SELECT 1").execute(&state.pool).await {
         Ok(_) => "ok",
         Err(e) => {
