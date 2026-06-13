@@ -8,7 +8,7 @@ use serde_json::json;
 
 use crate::db;
 use crate::error::{ApiResponse, AppError};
-use crate::models::article::ArticleQuery;
+use crate::models::article::{ArticleQuery, VALID_ARTICLE_STATUSES};
 use crate::pipeline::PipelineEvent;
 use crate::routes::AppState;
 
@@ -28,7 +28,10 @@ pub struct ArticleListParams {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
     pub source_id: Option<i64>,
+    /// DEPRECATED: use `status` instead. Backward compat: true→matched, false→pending.
     pub processed: Option<bool>,
+    /// Filter by article status: pending | processing | matched | skipped
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,11 +55,32 @@ pub async fn list_articles(
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(20).min(100);
+
+    // Validate status if provided
+    let status = match &params.status {
+        Some(s) => {
+            if !VALID_ARTICLE_STATUSES.contains(&s.as_str()) {
+                return Err(AppError::InvalidStatus(s.clone()));
+            }
+            Some(s.clone())
+        }
+        None => None,
+    };
+
+    // If both status and processed are provided, status takes priority
+    // (processed is only used as fallback when status is None — handled in build_article_filter)
+    let processed = if status.is_some() {
+        None
+    } else {
+        params.processed
+    };
+
     let query = ArticleQuery {
         page: Some(page),
         per_page: Some(per_page),
         source_id: params.source_id,
-        processed: params.processed,
+        processed,
+        status,
     };
 
     let items = db::article::list_articles(&state.pool, &query).await?;

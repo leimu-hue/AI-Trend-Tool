@@ -79,12 +79,24 @@ The system SHALL have request DTOs for creating and updating data sources. `Crea
 
 ### Requirement: Article model and ArticleQuery
 
-The system SHALL have an `Article` struct matching the `articles` table with `sqlx::FromRow` and `serde::Serialize`. The system SHALL have an `ArticleQuery` struct for query parameters: `page: Option<u32>`, `per_page: Option<u32>`, `source_id: Option<i64>`, `processed: Option<bool>`. `ArticleQuery` SHALL derive `serde::Deserialize` only (not `FromRow`).
+系统 SHALL 在 `Article` struct 中新增 `status: String` 字段（取值: `pending`、`processing`、`matched`、`skipped`），与 `articles.status` 列对应。`ArticleQuery` struct SHALL 新增 `status: Option<String>` 字段，替代 `processed: Option<bool>`。`processed` 参数 SHALL 保留为过渡期兼容字段。
 
-#### Scenario: Query articles with pagination and filter
+#### Scenario: Article status field mapped from DB
 
-- **WHEN** `ArticleQuery { page: Some(2), per_page: Some(20), source_id: Some(1), processed: Some(false) }` is constructed
-- **THEN** the query parameters SHALL represent page 2, 20 per page, filtered by source_id=1 and unprocessed only
+- **WHEN** `sqlx::query_as::<_, Article>("SELECT * FROM articles WHERE ...")` 执行
+- **THEN** 返回的 `Article` SHALL 包含 `status` 字段，值对应 `articles.status` 列
+
+#### Scenario: Query articles by status
+
+- **WHEN** `ArticleQuery { page: Some(1), status: Some("matched".to_string()), ... }` 被构造
+- **THEN** 查询参数 SHALL 包含 `status = 'matched'` 过滤条件
+
+#### Scenario: processed 参数向后兼容
+
+- **WHEN** `ArticleQuery` 的 `processed` 字段为 `Some(true)`
+- **THEN** 系统 SHALL 内部将其映射为 `status = 'matched'` 过滤
+- **WHEN** `processed` 为 `Some(false)`
+- **THEN** 系统 SHALL 内部将其映射为 `status = 'pending'` 过滤
 
 ### Requirement: Keyword model and request DTOs
 
@@ -115,7 +127,25 @@ The system SHALL have a `PushChannel` struct with `sqlx::FromRow` and `serde::Se
 
 ### Requirement: PushRecord model
 
-The system SHALL have a `PushRecord` struct matching the `push_records` table with `sqlx::FromRow` and `serde::Serialize`. The `status` field SHALL be `String` (values: pending, success, failed).
+`PushRecord` struct 的 `status` 字段 SHALL 扩展支持 `dead` 值（原有 `pending`、`processing`、`success`、`failed`）。新增 `last_error: Option<String>` 字段对应 `push_records.last_error` 列。`PushRecordWithChannel` struct SHALL 同步新增 `last_error: Option<String>` 字段。
+
+#### Scenario: PushRecord with dead status
+
+- **WHEN** `sqlx::query_as::<_, PushRecord>("SELECT * FROM push_records WHERE status = 'dead'")` 执行
+- **THEN** 结果 SHALL 包含 `status = "dead"` 的记录
+- **THEN** `last_error` SHALL 包含失败原因（如果有）
+
+#### Scenario: PushRecord serialized with last_error
+
+- **WHEN** 一个 `PushRecord` 被序列化为 JSON
+- **THEN** JSON SHALL 包含 `"last_error": "HTTP 500"` 或 `"last_error": null`
+- **THEN** `status` SHALL 可能为 `"dead"`
+
+#### Scenario: PushRecordWithChannel includes last_error
+
+- **WHEN** push records for a hotspot are queried via JOIN
+- **THEN** 每个 `PushRecordWithChannel` SHALL 包含 `last_error` 字段
+- **THEN** 对应的 SQL SHALL 选择 `pr.last_error`
 
 #### Scenario: Query pending push records
 

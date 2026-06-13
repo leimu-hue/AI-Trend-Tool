@@ -25,6 +25,8 @@ min_history_hours = 6
 interval_seconds = 10
 max_retries = 3
 retry_base_seconds = 60
+retry_max_seconds = 3600
+stale_timeout_minutes = 10
 
 [logging]
 dir = "./logs"

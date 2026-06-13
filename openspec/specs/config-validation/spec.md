@@ -56,6 +56,36 @@ The system SHALL validate all config fields after deserializing from TOML and SH
 - **WHEN** `pusher.max_retries` is `0`
 - **THEN** the system SHALL return `Err("pusher.max_retries must be > 0")`
 
+#### Scenario: Zero pusher retry_max_seconds rejected
+
+- **WHEN** `pusher.retry_max_seconds` is `0`
+- **THEN** the system SHALL return `Err("pusher.retry_max_seconds must be > 0")`
+
+#### Scenario: Zero pusher stale_timeout_minutes rejected
+
+- **WHEN** `pusher.stale_timeout_minutes` is `0`
+- **THEN** the system SHALL return `Err("pusher.stale_timeout_minutes must be > 0")`
+
+### Requirement: PusherConfig 新增字段及校验
+
+`PusherConfig` struct SHALL 新增 `retry_max_seconds: u64`（退避上限，默认 3600）和 `stale_timeout_minutes: u64`（陈旧超时，默认 10）。`config.toml` 的 `[pusher]` 段 SHALL 包含对应配置项。
+
+#### Scenario: retry_max_seconds 默认值
+
+- **WHEN** `config.toml` 中未指定 `retry_max_seconds`
+- **THEN** `PusherConfig.retry_max_seconds` SHALL 为 3600（1 小时）
+
+#### Scenario: stale_timeout_minutes 默认值
+
+- **WHEN** `config.toml` 中未指定 `stale_timeout_minutes`
+- **THEN** `PusherConfig.stale_timeout_minutes` SHALL 为 10（10 分钟）
+
+#### Scenario: config.toml pusher 段包含新字段
+
+- **WHEN** 查看 `config.toml` 的 `[pusher]` 段
+- **THEN** SHALL 包含 `retry_max_seconds = 3600`
+- **THEN** SHALL 包含 `stale_timeout_minutes = 10`
+
 ### Requirement: Config 验证单元测试
 
 `src/config.rs` SHALL 包含 `#[cfg(test)]` 测试模块，至少覆盖有效配置通过和无效配置（port=0）拒绝两个场景。

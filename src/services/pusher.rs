@@ -9,11 +9,26 @@ use crate::config::PusherConfig;
 use crate::db;
 use crate::pipeline::{Pipeline, PipelineEvent};
 
-/// Run one pusher iteration: atomically claim pending records, poll processing
-/// and retry-due records, send webhooks, update status with exponential backoff.
+/// Run one pusher iteration: recover stale processing records, atomically claim
+/// pending records, poll processing and retry-due records, send webhooks,
+/// update status with exponential backoff.
 ///
 /// Shared by the background loop and manual trigger endpoint.
 pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig, client: &reqwest::Client) {
+    // 0. Recover stale processing records (crashed previous run)
+    match db::push_record::recover_stale_processing_records(pool, config.stale_timeout_minutes)
+        .await
+    {
+        Ok(n) => {
+            if n > 0 {
+                tracing::info!("Pusher: recovered {} stale processing record(s)", n);
+            }
+        }
+        Err(e) => {
+            tracing::error!("Pusher: failed to recover stale records: {}", e);
+        }
+    }
+
     // 1. Atomically claim pending records
     if let Err(e) = db::push_record::claim_pending_records(pool).await {
         tracing::error!("Pusher: failed to claim pending records: {}", e);
@@ -155,8 +170,9 @@ async fn process_one(
                 channel.id,
                 channel.name
             );
-            // Mark as failed with max retries (skip)
-            if mark_failed(pool, config, record.id, record.retry_count).await {
+            // Mark as failed with max retries (skip) — no valid webhook URL
+            let err_msg = format!("Channel {} has no valid webhook URL", channel.id);
+            if mark_failed(pool, config, record.id, record.retry_count, &err_msg).await {
                 gave_up_cnt.fetch_add(1, Ordering::Relaxed);
             } else {
                 failed_cnt.fetch_add(1, Ordering::Relaxed);
@@ -199,6 +215,7 @@ async fn process_one(
                     "success",
                     record.retry_count,
                     None,
+                    None, // last_error: None on success
                 )
                 .await;
 
@@ -225,7 +242,8 @@ async fn process_one(
                     channel.name,
                     response.status()
                 );
-                if mark_failed(pool, config, record.id, record.retry_count).await {
+                let err_msg = format!("HTTP {}", response.status());
+                if mark_failed(pool, config, record.id, record.retry_count, &err_msg).await {
                     gave_up_cnt.fetch_add(1, Ordering::Relaxed);
                 } else {
                     failed_cnt.fetch_add(1, Ordering::Relaxed);
@@ -239,7 +257,8 @@ async fn process_one(
                 channel.name,
                 e
             );
-            if mark_failed(pool, config, record.id, record.retry_count).await {
+            let err_msg = format!("Network error: {}", e);
+            if mark_failed(pool, config, record.id, record.retry_count, &err_msg).await {
                 gave_up_cnt.fetch_add(1, Ordering::Relaxed);
             } else {
                 failed_cnt.fetch_add(1, Ordering::Relaxed);
@@ -249,29 +268,49 @@ async fn process_one(
 }
 
 /// Mark a push record as failed with exponential backoff.
-/// `next_retry_at = now + (retry_count * retry_base_seconds)`
-/// If max retries reached, sets `next_retry_at` to NULL.
-/// Returns `true` if the record was given up (max retries exhausted).
+/// `next_retry_at = now + min(base * 2^(n-1), retry_max_seconds)`
+/// If max retries exhausted, marks the record as `dead` (terminal state).
+/// Returns `true` if the record reached terminal state (dead or gave up).
 async fn mark_failed(
     pool: &SqlitePool,
     config: &PusherConfig,
     record_id: i64,
     current_retry_count: i32,
+    last_error: &str,
 ) -> bool {
     let new_retry_count = current_retry_count + 1;
     let gave_up = new_retry_count >= config.max_retries as i32;
-    let next_retry_at = if gave_up {
+
+    if gave_up {
         tracing::warn!(
-            "Pusher: record {} reached max retries ({}), giving up",
+            "Pusher: record {} reached max retries ({}), marking as dead. Last error: {}",
             record_id,
-            config.max_retries
+            config.max_retries,
+            last_error
         );
-        None
-    } else {
-        let delay = new_retry_count as i64 * config.retry_base_seconds as i64;
-        let at = Utc::now().naive_utc() + chrono::Duration::seconds(delay);
-        Some(at)
-    };
+        // Terminal dead state — no next_retry_at
+        if let Err(e) = db::push_record::update_push_status(
+            pool,
+            record_id,
+            "dead",
+            new_retry_count,
+            None,
+            Some(last_error),
+        )
+        .await
+        {
+            tracing::error!("Pusher: failed to mark record {} as dead: {}", record_id, e);
+        }
+        return true;
+    }
+
+    // Exponential backoff: delay = min(base * 2^(new_retry_count-1), retry_max_seconds)
+    let delay = compute_backoff_delay(
+        config.retry_base_seconds,
+        config.retry_max_seconds,
+        new_retry_count,
+    );
+    let next_retry_at = Some(Utc::now().naive_utc() + chrono::Duration::seconds(delay));
 
     if let Err(e) = db::push_record::update_push_status(
         pool,
@@ -279,6 +318,7 @@ async fn mark_failed(
         "failed",
         new_retry_count,
         next_retry_at,
+        Some(last_error),
     )
     .await
     {
@@ -288,7 +328,21 @@ async fn mark_failed(
             e
         );
     }
-    gave_up
+    false
+}
+
+/// Compute exponential backoff delay for retry_count N:
+///   delay = min(base * 2^(N-1), retry_max_seconds)
+///
+/// Examples (base=60, max=3600):
+///   N=1 → 60, N=2 → 120, N=3 → 240, N=4 → 480, N=5 → 960, N=7 → 3600 (capped)
+pub fn compute_backoff_delay(base_seconds: u64, max_seconds: u64, retry_count: i32) -> i64 {
+    if retry_count <= 0 {
+        return base_seconds as i64;
+    }
+    let shift = 1i64.checked_shl(retry_count as u32 - 1).unwrap_or(i64::MAX);
+    let exp_delay = (base_seconds as i64).saturating_mul(shift);
+    exp_delay.min(max_seconds as i64)
 }
 
 /// Extract the webhook URL from a channel's config JSON.
@@ -323,5 +377,73 @@ pub async fn start_pusher_loop(
                 run_pusher_once(&pool, &config, &client).await;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── 9.4: compute_backoff_delay tests ──
+
+    #[test]
+    fn backoff_retry_1_is_base() {
+        assert_eq!(compute_backoff_delay(60, 3600, 1), 60);
+    }
+
+    #[test]
+    fn backoff_retry_2_is_double() {
+        assert_eq!(compute_backoff_delay(60, 3600, 2), 120);
+    }
+
+    #[test]
+    fn backoff_retry_3_is_quadruple() {
+        assert_eq!(compute_backoff_delay(60, 3600, 3), 240);
+    }
+
+    #[test]
+    fn backoff_retry_4() {
+        assert_eq!(compute_backoff_delay(60, 3600, 4), 480);
+    }
+
+    #[test]
+    fn backoff_retry_5() {
+        assert_eq!(compute_backoff_delay(60, 3600, 5), 960);
+    }
+
+    #[test]
+    fn backoff_retry_6() {
+        assert_eq!(compute_backoff_delay(60, 3600, 6), 1920);
+    }
+
+    #[test]
+    fn backoff_capped_at_max() {
+        // 60 * 2^6 = 60 * 64 = 3840, capped at 3600
+        assert_eq!(compute_backoff_delay(60, 3600, 7), 3600);
+    }
+
+    #[test]
+    fn backoff_high_retry_still_capped() {
+        // 60 * 2^9 = 60 * 512 = 30720, capped at 3600
+        assert_eq!(compute_backoff_delay(60, 3600, 10), 3600);
+    }
+
+    #[test]
+    fn backoff_zero_retry_returns_base() {
+        assert_eq!(compute_backoff_delay(60, 3600, 0), 60);
+    }
+
+    #[test]
+    fn backoff_different_base() {
+        assert_eq!(compute_backoff_delay(30, 3600, 1), 30);
+        assert_eq!(compute_backoff_delay(30, 3600, 2), 60);
+        assert_eq!(compute_backoff_delay(30, 3600, 3), 120);
+    }
+
+    #[test]
+    fn backoff_small_max() {
+        assert_eq!(compute_backoff_delay(60, 100, 1), 60);
+        assert_eq!(compute_backoff_delay(60, 100, 2), 100); // 120 capped at 100
+        assert_eq!(compute_backoff_delay(60, 100, 3), 100); // 240 capped at 100
     }
 }

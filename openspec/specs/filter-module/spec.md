@@ -42,42 +42,49 @@ The system SHALL run the Filter module as an asynchronous background task that u
 
 ### Requirement: Unprocessed article batching
 
-The system SHALL fetch unprocessed articles in batches (size controlled by `config.filter.batch_size`) for keyword matching.
+系统 SHALL 通过原子 claim 获取待处理文章：调用 `db::article::claim_pending_articles(pool, batch_size)` 将 `pending` 文章原子更新为 `processing` 并返回。完成匹配后，系统 SHALL 分别调用 `mark_articles_matched` 和 `mark_articles_skipped` 分类标记文章状态。原 `SELECT WHERE processed_at IS NULL` 方式 SHALL 被移除。
 
-#### Scenario: Fetch unprocessed articles
+#### Scenario: 原子领取待处理文章
 
-- **WHEN** `run_filter_once` executes
-- **THEN** it SHALL query `articles WHERE processed_at IS NULL ORDER BY fetched_at ASC LIMIT batch_size`
+- **WHEN** `run_filter_once` 执行
+- **THEN** 系统 SHALL 调用 `claim_pending_articles(pool, config.batch_size as i64)` 原子领取最多 `batch_size` 篇 pending 文章
+- **THEN** 领取的文章状态 SHALL 被原子更新为 `processing`
 
-#### Scenario: No unprocessed articles — early return
+#### Scenario: 无 pending 文章 — 提前返回
 
-- **WHEN** no unprocessed articles exist
-- **THEN** the filter SHALL return immediately without error
+- **WHEN** `claim_pending_articles` 返回空列表
+- **THEN** filter SHALL 返回 `false` 且不执行任何后续操作
+
+#### Scenario: 无启用关键字 — 标记所有为 skipped
+
+- **WHEN** 有 processing 文章但无启用关键字
+- **THEN** filter SHALL 将所有 processing 文章标记为 `skipped`
+- **THEN** filter SHALL 返回 `false`
 
 ### Requirement: Aho-Corasick keyword matching
 
-The system SHALL build an Aho-Corasick automaton from all enabled keywords and match against each article's `title + summary` text.
+系统 SHALL 通过 `AhoCorasickMatcher`（实现 `KeywordMatcher` trait）构建 Aho-Corasick 自动机并对每篇文章的 `title + summary` 文本执行关键字匹配。`AhoCorasickMatcher`、`Automata` 结构体及相关构建逻辑 SHALL 位于 `src/services/filter/matching.rs`；`Automata` 结构体定义 SHALL 位于 `src/services/filter/types.rs`。
 
 #### Scenario: Build automaton from enabled keywords
 
-- **WHEN** the filter runs
-- **THEN** it SHALL load all keywords where `enabled = 1`
-- **AND** SHALL build an Aho-Corasick automaton from their `word` values
+- **WHEN** `AhoCorasickMatcher` 被构造
+- **THEN** 它 SHALL 接收所有启用关键字的切片
+- **AND** SHALL 构建一个区分大小写自动机和一个不区分大小写自动机
 
 #### Scenario: Case-insensitive matching
 
-- **WHEN** a keyword has `case_sensitive = false`
-- **THEN** the system SHALL match case-insensitively using `ascii_case_insensitive` mode
+- **WHEN** 关键字 `case_sensitive = false`
+- **THEN** `AhoCorasickMatcher` SHALL 使用不区分大小写自动机匹配（`ascii_case_insensitive` 模式）
 
 #### Scenario: Record keyword mentions in batch
 
-- **WHEN** a keyword matches in an article
-- **THEN** the system SHALL accumulate the (keyword_id, article_id) pair for batch insertion
+- **WHEN** 关键字在文章中匹配
+- **THEN** 系统 SHALL 收集 (keyword_id, article_id) 对用于批量插入
 
-#### Scenario: No enabled keywords — mark all processed
+#### Scenario: No enabled keywords — mark all skipped
 
-- **WHEN** no enabled keywords exist
-- **THEN** the filter SHALL mark all unprocessed articles as processed and return
+- **WHEN** 无启用关键字
+- **THEN** 系统 SHALL 将所有 processing 文章标记为 skipped 并返回
 
 ### Requirement: Hourly bucket counting
 
@@ -171,12 +178,24 @@ The system SHALL load all keywords' hourly counts in a single query rather than 
 
 ### Requirement: Mark articles processed
 
-The system SHALL mark all processed articles by setting `processed_at = datetime('now')` after matching completes.
+系统 SHALL 在匹配完成后分类标记文章：命中关键字的文章标记为 `matched`，未命中的标记为 `skipped`。两种标记 SHALL 同步更新 `processed_at = datetime('now')`。原"所有文章统一标记 processed_at"的方式 SHALL 被移除。
 
-#### Scenario: Batch update processed articles
+#### Scenario: 命中文章标记为 matched
 
-- **WHEN** the filter completes matching for a batch
-- **THEN** all articles in that batch SHALL have `processed_at` updated in chunks of 100
+- **WHEN** 某篇文章至少命中一个关键字
+- **THEN** 该文章的 `status` SHALL 更新为 `matched`
+- **THEN** `processed_at` SHALL 设置为当前时间
+
+#### Scenario: 未命中文章标记为 skipped
+
+- **WHEN** 某篇文章未命中任何关键字
+- **THEN** 该文章的 `status` SHALL 更新为 `skipped`
+- **THEN** `processed_at` SHALL 设置为当前时间
+
+#### Scenario: 批量标记分块执行
+
+- **WHEN** matched 或 skipped 文章数量超过 100
+- **THEN** 系统 SHALL 每 100 个 ID 一批执行 UPDATE
 
 ### Requirement: compute_stats 纯函数
 
@@ -195,3 +214,24 @@ The system SHALL mark all processed articles by setting `processed_at = datetime
 - **WHEN** `compute_stats(&[2, 4, 4, 4, 5, 5, 7, 9])` 被调用
 - **THEN** 均值 SHALL 约等于 5.0
 - **THEN** 标准差 SHALL 约等于 2.0
+
+### Requirement: Filter 子模块组织
+
+系统 SHALL 将 filter 模块拆分为 `src/services/filter.rs`（模块根）+ `src/services/filter/` 子目录，包含以下子模块：
+- `types.rs` — `Automata` 结构体定义
+- `traits.rs` — `KeywordMatcher` trait 和 `ArticleMatches` 结构体定义
+- `matching.rs` — `AhoCorasickMatcher` 实现
+- `detection.rs` — `compute_stats`、`detect_and_push`、`upsert_hot_event_record`
+- `validation.rs` — `claim_and_validate`
+
+#### Scenario: filter.rs 仅含编排逻辑
+
+- **WHEN** 查看 `filter.rs` 文件内容
+- **THEN** 它 SHALL 只包含 `run_filter_once`、`start_filter_loop`、`#[cfg(test)]` 模块
+- **THEN** 它 SHALL NOT 包含 struct 定义、trait 定义或子功能函数实现
+
+#### Scenario: 公开 API 路径不变
+
+- **WHEN** 外部代码通过 `crate::services::filter::run_filter_once` 调用
+- **THEN** 该路径 SHALL 仍然有效
+- **THEN** 函数签名 SHALL 保持不变

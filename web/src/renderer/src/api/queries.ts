@@ -20,6 +20,8 @@ export interface Article {
   published_at: string | null
   fetched_at: string
   processed_at: string | null
+  /** 'pending' | 'processing' | 'matched' | 'skipped' — may be absent in legacy data */
+  status?: string
 }
 
 export interface Source {
@@ -62,9 +64,11 @@ export interface PushRecord {
   hot_event_id: number
   channel_id: number
   channel_name: string
+  /** 'pending' | 'failed' | 'sent' | 'dead' */
   status: string
   retry_count: number
   next_retry_at: string | null
+  last_error: string | null
   created_at: string
   updated_at: string
 }
@@ -80,7 +84,7 @@ export const queryApi = {
   getHotspots: (params?: { page?: number; per_page?: number; keyword_id?: number }) =>
     client.get<{ data: PaginatedResponse<HotEvent> }>('/hotspots', { params }).then((r) => r.data.data),
 
-  getArticles: (params?: { page?: number; per_page?: number; source_id?: number; processed?: boolean }) =>
+  getArticles: (params?: { page?: number; per_page?: number; source_id?: number; processed?: boolean; status?: string }) =>
     client.get<{ data: PaginatedResponse<Article> }>('/articles', { params }).then((r) => r.data.data),
 
   getSources: () =>

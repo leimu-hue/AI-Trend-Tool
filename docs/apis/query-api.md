@@ -27,7 +27,8 @@ List articles with pagination and optional filtering.
 | `page`       | `integer` | No       | `1`     | Page number (1-based)                    |
 | `per_page`   | `integer` | No       | `20`    | Items per page                           |
 | `source_id`  | `integer` | No       | —       | Filter by source ID                      |
-| `processed`  | `boolean` | No       | —       | Filter by processed status               |
+| `status`     | `string`  | No       | —       | Filter by article status: `pending`, `processing`, `matched`, `skipped` |
+| `processed`  | `boolean` | **Deprecated** | — | Use `status` instead. `true` → `matched`, `false` → `pending`. Ignored when `status` is set. |
 
 **Response** `200 OK`
 
@@ -44,7 +45,8 @@ List articles with pagination and optional filtering.
         "content": "Full article content",
         "published_at": "2026-06-07T09:00:00",
         "fetched_at": "2026-06-07T09:10:45",
-        "processed_at": null
+        "processed_at": null,
+        "status": "pending"
       }
     ],
     "total": 100,
@@ -54,10 +56,21 @@ List articles with pagination and optional filtering.
 }
 ```
 
+**Error Responses**
+
+| Status | Code              | Message                                                     |
+|--------|-------------------|-------------------------------------------------------------|
+| 400    | `INVALID_STATUS`  | `Invalid status 'xxx'. Valid values: pending, processing, matched, skipped` |
+
 **Example**
 
 ```bash
-curl "http://localhost:8080/api/v1/articles?page=1&per_page=10&source_id=1" \
+# New: filter by status
+curl "http://localhost:8080/api/v1/articles?page=1&per_page=10&status=matched" \
+  -H "Authorization: Bearer <token>"
+
+# Deprecated but still supported: filter by processed
+curl "http://localhost:8080/api/v1/articles?page=1&per_page=10&processed=true" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -234,7 +247,9 @@ Return the current server configuration (sensitive fields like `database` and `a
     "pusher": {
       "interval_seconds": 30,
       "max_retries": 3,
-      "retry_base_seconds": 60
+      "retry_base_seconds": 60,
+      "retry_max_seconds": 3600,
+      "stale_timeout_minutes": 10
     }
   }
 }

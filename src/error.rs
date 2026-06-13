@@ -11,6 +11,8 @@ pub enum AppError {
     /// 400 - Bad request
     #[allow(dead_code)]
     BadRequest(String),
+    /// 400 - Invalid status parameter value
+    InvalidStatus(String),
     /// 401 - Unauthorized
     Unauthorized(String),
     /// 409 - Conflict (e.g., unique constraint violation)
@@ -32,6 +34,14 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => {
                 tracing::warn!("BadRequest error: {}", msg);
                 (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg)
+            }
+            AppError::InvalidStatus(status) => {
+                let msg = format!(
+                    "Invalid status '{}'. Valid values: pending, processing, matched, skipped",
+                    status
+                );
+                tracing::warn!("InvalidStatus error: {}", msg);
+                (StatusCode::BAD_REQUEST, "INVALID_STATUS", msg)
             }
             AppError::Unauthorized(msg) => {
                 tracing::warn!("Unauthorized error: {}", msg);

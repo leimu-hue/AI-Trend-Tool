@@ -5,6 +5,7 @@ import * as echarts from 'echarts'
 import { queryApi, type HotEvent, type Article, type Source, type Keyword, type TrendPoint } from '../api/queries'
 import Empty from '../components/Empty'
 import { useToast } from '../components/Toast'
+import { articleStatusBadge } from '../utils/statusBadge'
 
 function formatDate(d: string | null): string {
   if (!d) return '—'
@@ -20,7 +21,7 @@ export default function Dashboard() {
   const [keywords, setKeywords] = useState<Keyword[]>([])
   const [hotspots, setHotspots] = useState<HotEvent[]>([])
   const [articles, setArticles] = useState<Article[]>([])
-  const [pushStatusMap, setPushStatusMap] = useState<Record<number, string>>({})
+  const [pushStatusMap, setPushStatusMap] = useState<Record<number, { status: string; errors: string[] }>>({})
   const [trendPoints, setTrendPoints] = useState<TrendPoint[]>([])
   const [activeKeyword, setActiveKeyword] = useState('')
   const [activeKeywordId, setActiveKeywordId] = useState<number | null>(null)
@@ -80,14 +81,32 @@ export default function Dashboard() {
             const pushResults = await Promise.allSettled(
               hs.items.map((h) => queryApi.getPushRecords(h.id))
             )
-            const statusMap: Record<number, string> = {}
+            const statusMap: Record<number, { status: string; errors: string[] }> = {}
             pushResults.forEach((pr, idx) => {
               const heId = hs.items[idx].id
               if (pr.status === 'fulfilled') {
-                const hasSent = pr.value.some((r) => r.status === 'sent')
-                statusMap[heId] = hasSent ? 'sent' : 'pending'
+                const records = pr.value
+                const deadRecords = records.filter((r) => r.status === 'dead')
+                const failedRecords = records.filter((r) => r.status === 'failed')
+                const sentCount = records.filter((r) => r.status === 'sent').length
+
+                if (deadRecords.length > 0) {
+                  statusMap[heId] = {
+                    status: 'dead',
+                    errors: deadRecords.map((r) => `${r.channel_name}: ${r.last_error || '未知错误'}`),
+                  }
+                } else if (failedRecords.length > 0) {
+                  statusMap[heId] = {
+                    status: 'failed',
+                    errors: failedRecords.map((r) => `${r.channel_name}: ${r.last_error || '未知错误'}`),
+                  }
+                } else if (sentCount === records.length && records.length > 0) {
+                  statusMap[heId] = { status: 'success', errors: [] }
+                } else {
+                  statusMap[heId] = { status: 'pending', errors: [] }
+                }
               } else {
-                statusMap[heId] = 'unknown'
+                statusMap[heId] = { status: 'unknown', errors: [] }
               }
             })
             setPushStatusMap(statusMap)
@@ -305,8 +324,22 @@ export default function Dashboard() {
                   {hotspots.map((h) => {
                     const kw = keywordMap[h.keyword_id]
                     const dev = calcDeviation(h)
-                    const pushStatus = pushStatusMap[h.id] || 'pending'
+                    const pushInfo = pushStatusMap[h.id] || { status: 'pending', errors: [] }
                     const isSelected = activeKeywordId === h.keyword_id
+                    const pushBadge = (() => {
+                      switch (pushInfo.status) {
+                        case 'success':
+                          return { cls: 'badge-success', label: '已推送', title: undefined }
+                        case 'failed':
+                          return { cls: 'badge-warn', label: '推送失败', title: pushInfo.errors.join('; ') || undefined }
+                        case 'dead':
+                          return { cls: 'badge-dead', label: '已放弃', title: pushInfo.errors.join('; ') || undefined }
+                        case 'pending':
+                          return { cls: 'badge-info', label: '待推送', title: undefined }
+                        default:
+                          return { cls: 'badge-muted', label: '未知', title: undefined }
+                      }
+                    })()
                     return (
                       <tr
                         key={h.id}
@@ -328,8 +361,11 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td>
-                          <span className={`badge ${pushStatus === 'sent' ? 'badge-success' : 'badge-warn'}`}>
-                            {pushStatus === 'sent' ? '已推送' : '待推送'}
+                          <span
+                            className={`badge ${pushBadge.cls}`}
+                            title={pushBadge.title}
+                          >
+                            {pushBadge.label}
                           </span>
                         </td>
                       </tr>
@@ -390,9 +426,10 @@ export default function Dashboard() {
                       {formatDate(a.published_at)}
                     </td>
                     <td>
-                      <span className={`badge ${a.processed_at ? 'badge-success' : 'badge-warn'}`}>
-                        {a.processed_at ? '已处理' : '待处理'}
-                      </span>
+                      {(() => {
+                        const badge = articleStatusBadge(a.status, a.processed_at)
+                        return <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                      })()}
                     </td>
                   </tr>
                 ))}

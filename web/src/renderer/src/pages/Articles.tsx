@@ -3,6 +3,7 @@ import { Select } from 'antd'
 import { queryApi, type Article, type Source } from '../api/queries'
 import Empty from '../components/Empty'
 import { useToast } from '../components/Toast'
+import { articleStatusBadge } from '../utils/statusBadge'
 
 const PER_PAGE = 20
 
@@ -15,7 +16,7 @@ export default function Articles() {
   // Filters
   const [sources, setSources] = useState<Source[]>([])
   const [sourceFilter, setSourceFilter] = useState<number | undefined>(undefined)
-  const [processedFilter, setProcessedFilter] = useState<boolean | undefined>(undefined)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
 
   const toast = useToast()
 
@@ -25,14 +26,14 @@ export default function Articles() {
   const sourceNameMap = new Map(sources.map((s) => [s.id, s.name]))
 
   const load = useCallback(
-    async (p: number, srcFilter: number | undefined, procFilter: boolean | undefined) => {
+    async (p: number, srcFilter: number | undefined, stFilter: string | undefined) => {
       setLoading(true)
       try {
         const result = await queryApi.getArticles({
           page: p,
           per_page: PER_PAGE,
           source_id: srcFilter,
-          processed: procFilter,
+          status: stFilter,
         })
         setArticles(result.items)
         setTotal(result.total)
@@ -53,8 +54,8 @@ export default function Articles() {
 
   // Load articles when filters change
   useEffect(() => {
-    load(1, sourceFilter, processedFilter)
-  }, [load, sourceFilter, processedFilter])
+    load(1, sourceFilter, statusFilter)
+  }, [load, sourceFilter, statusFilter])
 
   // Trigger filter
   const handleRunFilter = useCallback(async () => {
@@ -62,11 +63,11 @@ export default function Articles() {
       await queryApi.triggerFilter()
       toast.success('过滤器已触发，正在处理...')
       // Refresh list after trigger
-      load(page, sourceFilter, processedFilter)
+      load(page, sourceFilter, statusFilter)
     } catch {
       // error handled by interceptor
     }
-  }, [toast, load, page, sourceFilter, processedFilter])
+  }, [toast, load, page, sourceFilter, statusFilter])
 
   function formatDate(d: string | null): string {
     if (!d) return '—'
@@ -98,19 +99,21 @@ export default function Articles() {
               ]}
             />
 
-            {/* Processed filter */}
+            {/* Status filter */}
             <Select
               className="filter-select"
               popupClassName="filter-select-dropdown"
               size="small"
-              value={processedFilter === undefined ? '' : String(processedFilter)}
+              value={statusFilter ?? ''}
               onChange={(val) => {
-                setProcessedFilter(val === '' ? undefined : val === 'true')
+                setStatusFilter(val === '' ? undefined : String(val))
               }}
               options={[
                 { value: '', label: '全部状态' },
-                { value: 'false', label: '待处理' },
-                { value: 'true', label: '已处理' },
+                { value: 'pending', label: '待处理' },
+                { value: 'processing', label: '处理中' },
+                { value: 'matched', label: '已匹配' },
+                { value: 'skipped', label: '已跳过' },
               ]}
             />
 
@@ -182,14 +185,16 @@ export default function Articles() {
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={`badge ${a.processed_at ? 'badge-success' : 'badge-warn'}`}
-                        >
-                          <span
-                            className={`badge-dot dot-show ${a.processed_at ? 'success-dot' : 'warn-dot'}`}
-                          />
-                          {a.processed_at ? '已处理' : '待处理'}
-                        </span>
+                        {(() => {
+                          const badge = articleStatusBadge(a.status, a.processed_at)
+                          const dotCls = badge.cls.replace('badge-', '') + '-dot'
+                          return (
+                            <span className={`badge ${badge.cls}`}>
+                              <span className={`badge-dot dot-show ${dotCls}`} />
+                              {badge.label}
+                            </span>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -217,14 +222,14 @@ export default function Articles() {
                 <button
                   className="btn btn-ghost btn-sm"
                   disabled={page <= 1}
-                  onClick={() => load(page - 1, sourceFilter, processedFilter)}
+                  onClick={() => load(page - 1, sourceFilter, statusFilter)}
                 >
                   上一页
                 </button>
                 <button
                   className="btn btn-ghost btn-sm"
                   disabled={page >= totalPages}
-                  onClick={() => load(page + 1, sourceFilter, processedFilter)}
+                  onClick={() => load(page + 1, sourceFilter, statusFilter)}
                 >
                   下一页
                 </button>

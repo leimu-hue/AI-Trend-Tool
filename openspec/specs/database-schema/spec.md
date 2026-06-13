@@ -8,7 +8,7 @@ Defines the SQLite database schema for TrendAITool — 8 tables covering API tok
 
 ### Requirement: Migration auto-runs on startup
 
-The system SHALL automatically apply all pending SQLite migrations on server startup via `sqlx::migrate!()`. Migrations SHALL run before any HTTP server or background module starts. Failed migrations SHALL cause the process to exit with an error.
+The system SHALL automatically apply all pending SQLite migrations on server startup via `sqlx::migrate!()`. Migrations SHALL run before any HTTP server or background module starts. Failed migrations SHALL cause the process to exit with an error. `build.rs` 的 `rerun-if-changed` SHALL 包含新的 migration 文件 `docs/migrations/20260613000001_article_status.sql` 和 `docs/migrations/20260613000002_push_record_enhancements.sql`。
 
 #### Scenario: Fresh database on first startup
 
@@ -80,15 +80,24 @@ The system SHALL have a `data_sources` table storing RSS/Atom feed configuration
 
 The system SHALL have an `articles` table storing fetched articles.
 
-**Columns**: `id` (INTEGER PK AUTOINCREMENT), `source_id` (INTEGER NOT NULL FK→data_sources ON DELETE CASCADE), `link` (TEXT NOT NULL UNIQUE — dedup key), `title` (TEXT NOT NULL DEFAULT ''), `summary` (TEXT NOT NULL DEFAULT ''), `content` (TEXT NOT NULL DEFAULT ''), `published_at` (DATETIME), `fetched_at` (DATETIME NOT NULL DEFAULT current time), `processed_at` (DATETIME — NULL = unprocessed).
+**Columns**: `id` (INTEGER PK AUTOINCREMENT), `source_id` (INTEGER NOT NULL FK→data_sources ON DELETE CASCADE), `link` (TEXT NOT NULL UNIQUE — dedup key), `title` (TEXT NOT NULL DEFAULT ''), `summary` (TEXT NOT NULL DEFAULT ''), `content` (TEXT NOT NULL DEFAULT ''), `published_at` (DATETIME), `fetched_at` (DATETIME NOT NULL DEFAULT current time), `processed_at` (DATETIME — NULL = unprocessed), `status` (TEXT NOT NULL DEFAULT 'pending' — values: pending/processing/matched/skipped).
 
-**Indexes**: `idx_articles_processed` ON `processed_at`, `idx_articles_source` ON `source_id`, `idx_articles_fetched` ON `fetched_at`.
+**Indexes**: `idx_articles_status` ON `status`, `idx_articles_source` ON `source_id`, `idx_articles_fetched` ON `fetched_at`. 原 `idx_articles_processed` 索引 SHALL 被移除。
 
-#### Scenario: Fetch new article
+#### Scenario: 新文章使用默认 status
 
 - **WHEN** a new article is inserted with a unique link
 - **THEN** the row SHALL be persisted with `fetched_at` set to current time
 - **THEN** `processed_at` SHALL be NULL
+- **THEN** `status` SHALL be `pending`
+
+#### Scenario: 存量数据迁移
+
+- **WHEN** migration `20260613000001_article_status.sql` 运行
+- **THEN** `ALTER TABLE articles ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'` SHALL 执行
+- **THEN** `UPDATE articles SET status = 'matched' WHERE processed_at IS NOT NULL` SHALL 执行
+- **THEN** `CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)` SHALL 执行
+- **THEN** `DROP INDEX IF EXISTS idx_articles_processed` SHALL 执行
 
 #### Scenario: Duplicate article link
 
@@ -182,7 +191,7 @@ The system SHALL have a `push_channels` table storing alert notification channel
 
 The system SHALL have a `push_records` table tracking per-hotspot per-channel push delivery status.
 
-**Columns**: `id` (INTEGER PK AUTOINCREMENT), `hot_event_id` (INTEGER NOT NULL FK→hot_events ON DELETE CASCADE), `channel_id` (INTEGER NOT NULL FK→push_channels ON DELETE CASCADE), `status` (TEXT NOT NULL DEFAULT 'pending' — pending/success/failed), `retry_count` (INTEGER NOT NULL DEFAULT 0), `next_retry_at` (DATETIME), `created_at` (DATETIME NOT NULL DEFAULT current time), `updated_at` (DATETIME NOT NULL DEFAULT current time).
+**Columns**: `id` (INTEGER PK AUTOINCREMENT), `hot_event_id` (INTEGER NOT NULL FK→hot_events ON DELETE CASCADE), `channel_id` (INTEGER NOT NULL FK→push_channels ON DELETE CASCADE), `status` (TEXT NOT NULL DEFAULT 'pending' — pending/processing/success/failed/dead), `retry_count` (INTEGER NOT NULL DEFAULT 0), `next_retry_at` (DATETIME), `last_error` (TEXT — NULL, records last failure reason), `created_at` (DATETIME NOT NULL DEFAULT current time), `updated_at` (DATETIME NOT NULL DEFAULT current time).
 
 **Constraints**: `UNIQUE(hot_event_id, channel_id)` — one record per hotspot per channel.
 
@@ -191,7 +200,7 @@ The system SHALL have a `push_records` table tracking per-hotspot per-channel pu
 #### Scenario: Create push record for a hotspot
 
 - **WHEN** a hotspot is detected and push records are created for each enabled channel
-- **THEN** each record SHALL have `status = 'pending'`, `retry_count = 0`
+- **THEN** each record SHALL have `status = 'pending'`, `retry_count = 0`, `last_error = NULL`
 - **THEN** duplicate (hot_event_id, channel_id) pairs SHALL be rejected by the UNIQUE constraint
 
 #### Scenario: Pusher polls pending records
@@ -199,3 +208,9 @@ The system SHALL have a `push_records` table tracking per-hotspot per-channel pu
 - **WHEN** the pusher queries `push_records WHERE status = 'pending'`
 - **THEN** the status index SHALL provide efficient lookup
 - **THEN** only records matching the status SHALL be returned
+
+#### Scenario: 存量 push_records 迁移
+
+- **WHEN** migration `20260613000002_push_record_enhancements.sql` 运行
+- **THEN** `ALTER TABLE push_records ADD COLUMN last_error TEXT` SHALL 执行
+- **THEN** `UPDATE push_records SET status = 'dead' WHERE status = 'failed' AND next_retry_at IS NULL AND retry_count > 0` SHALL 执行

@@ -72,10 +72,16 @@
 
 #### Scenario: 显示推送状态
 
-- **WHEN** 热点已推送
+- **WHEN** 热点所有 channel 推送记录状态均为 `success`
 - **THEN** 状态列 SHALL 显示绿色 `.badge-success` 徽章「已推送」
-- **WHEN** 热点待推送
-- **THEN** 状态列 SHALL 显示黄色 `.badge-warn` 徽章「待推送」
+- **WHEN** 热点任一 channel 推送记录状态为 `dead`
+- **THEN** 状态列 SHALL 显示红色 `.badge-dead` 徽章「已放弃」，title 属性 SHALL 包含各 channel 的 `last_error` 信息
+- **WHEN** 热点任一 channel 推送记录状态为 `failed` 且无 `dead` 记录
+- **THEN** 状态列 SHALL 显示黄色 `.badge-warn` 徽章「推送失败」，title 属性 SHALL 包含错误详情
+- **WHEN** 热点所有 channel 推送记录状态为 `pending`
+- **THEN** 状态列 SHALL 显示蓝色 `.badge-info` 徽章「待推送」
+- **WHEN** 推送记录请求失败或状态未知
+- **THEN** 状态列 SHALL 显示灰色 `.badge-muted` 徽章「未知」
 
 #### Scenario: 面板头部包含操作按钮
 
@@ -97,7 +103,22 @@
 #### Scenario: 显示最新文章
 
 - **WHEN** 仪表盘加载完成且存在文章
-- **THEN** 表格 SHALL 显示最近 5 篇文章，每行包含：来源名（mono 字体 11px）、标题（truncate 截断，max-width: 320px，可点击打开原文链接）、匹配关键词（mono 字体绿色）、发布时间（mono 字体 11px）、处理状态（badge-success 已处理 / badge-warn 待处理）
+- **THEN** 表格 SHALL 显示最近 5 篇文章，每行包含：来源名（mono 字体 11px）、标题（truncate 截断，max-width: 320px，可点击打开原文链接）、匹配关键词（mono 字体绿色）、发布时间（mono 字体 11px）、处理状态（使用 `articleStatusBadge` 工具函数渲染 4 态 Badge）
+
+#### Scenario: pending 状态文章
+
+- **WHEN** 文章 `status` 为 `pending`
+- **THEN** 状态列 SHALL 显示黄色 Badge「待处理」
+
+#### Scenario: matched 状态文章
+
+- **WHEN** 文章 `status` 为 `matched`
+- **THEN** 状态列 SHALL 显示绿色 Badge「已匹配」
+
+#### Scenario: 旧数据无 status 字段
+
+- **WHEN** 文章无 `status` 字段但 `processed_at` 有值
+- **THEN** 状态列 SHALL 显示绿色 Badge「已处理」（向后兼容 fallback）
 
 #### Scenario: 面板头部包含跳转链接
 
@@ -115,6 +136,25 @@
 
 - **WHEN** 文章的 `title` 字段为 null 或空字符串
 - **THEN** 标题列 SHALL 显示「(无标题)」作为占位文本，仍保留原文链接
+
+### Requirement: pushStatusMap 支持聚合状态和错误信息
+
+仪表盘页面的 `pushStatusMap` SHALL 从 `Record<number, string>` 扩展为 `Record<number, { status: string; errors: string[] }>`，跨多个 channel 聚合热点推送状态。
+
+#### Scenario: 多个 channel 全部成功
+
+- **WHEN** 热点有 2 个 channel 的推送记录，状态均为 `success`
+- **THEN** `pushStatusMap[hotspotId]` 为 `{ status: 'success', errors: [] }`
+
+#### Scenario: 存在 dead 记录
+
+- **WHEN** 热点有 2 个 channel 的推送记录，状态分别为 `success` 和 `dead`，dead 记录的 `last_error` 为 `"timeout"`
+- **THEN** `pushStatusMap[hotspotId]` 为 `{ status: 'dead', errors: ['channel_name: timeout'] }`
+
+#### Scenario: 存在 failed 但无 dead
+
+- **WHEN** 热点有 2 个 channel 的推送记录，状态分别为 `pending` 和 `failed`，failed 记录的 `last_error` 为 `"DNS error"`
+- **THEN** `pushStatusMap[hotspotId]` 为 `{ status: 'failed', errors: ['channel_name: DNS error'] }`
 
 ### Requirement: 仪表盘加载状态
 

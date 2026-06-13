@@ -30,15 +30,26 @@ The system SHALL run the Pusher module as an asynchronous background task that u
 - **WHEN** the global `CancellationToken` is cancelled
 - **THEN** the Pusher SHALL log a shutdown message and break out of its loop
 
-### Requirement: Pending and retry-due record polling
+### Requirement: Pending and retry-due record polling with stale recovery
 
-The system SHALL first atomically claim push_records by updating status from 'pending' to 'processing', then query for records with `status = 'processing'` for webhook delivery. The retry count limit SHALL use the `max_retries` value from pusher config.
+在领取记录之前，Pusher SHALL 先调用 `recover_stale_processing_records` 恢复卡死在 `processing` 超时的记录。然后原子领取 pending 和 retry-due 记录。领取查询 SHALL 排除 `status='dead'` 的记录。
+
+#### Scenario: Stale recovery before claiming
+
+- **WHEN** `run_pusher_once` executes
+- **THEN** it SHALL first call `recover_stale_processing_records(pool, config.stale_timeout_minutes)`
+- **THEN** it SHALL then atomically claim pending/retry-due records
 
 #### Scenario: Atomically claim pending records
 
-- **WHEN** `run_pusher_once` executes
-- **THEN** it SHALL first execute `UPDATE push_records SET status='processing' WHERE status='pending' AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))`
+- **WHEN** `run_pusher_once` executes after stale recovery
+- **THEN** it SHALL first execute `UPDATE push_records SET status='processing' WHERE status IN ('pending', 'failed') AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))`
 - **THEN** it SHALL then SELECT records WHERE `status='processing'` for webhook delivery
+
+#### Scenario: Dead records not claimed
+
+- **WHEN** push records have `status='dead'`
+- **THEN** the atomic claim UPDATE SHALL NOT select them for processing
 
 #### Scenario: No pushable records — early return
 
@@ -60,20 +71,24 @@ The system SHALL send a POST request to the channel's webhook URL with a JSON pa
 
 - **WHEN** the webhook POST returns a 2xx status
 - **THEN** the system SHALL update the push record status to `success`
+- **THEN** `last_error` SHALL be set to NULL
 
 #### Scenario: Mark failed on non-2xx response
 
 - **WHEN** the webhook POST returns a non-2xx status
-- **THEN** the system SHALL increment `retry_count` and set status to `failed` with exponential backoff for `next_retry_at`
+- **THEN** the system SHALL set `last_error` to `"HTTP <status_code>"`
+- **THEN** the system SHALL increment `retry_count` and set status to `failed`（retry_count < max_retries）or `dead`（retry_count >= max_retries）
 
 #### Scenario: Mark failed on network error
 
 - **WHEN** the webhook POST fails with a network error
-- **THEN** the system SHALL increment `retry_count` and set status to `failed` with exponential backoff
+- **THEN** the system SHALL set `last_error` to `"Network error: <error>"` with a brief description
+- **THEN** the system SHALL increment `retry_count` and apply exponential backoff
 
 #### Scenario: Skip channel with no webhook URL
 
 - **WHEN** a push channel's config JSON does not contain a valid `url` field
+- **THEN** the system SHALL set `last_error` to `"Channel N has no valid webhook URL"`
 - **THEN** the system SHALL mark the push record as `failed` and log an error
 
 ### Requirement: Concurrent webhook push delivery
@@ -99,22 +114,33 @@ The system SHALL process pushable records concurrently with a maximum of 8 simul
 
 ### Requirement: Exponential backoff retry
 
-The system SHALL implement exponential backoff for failed push attempts: `next_retry_at = now + (retry_count * retry_base_seconds)`.
+系统 SHALL 实现指数退避计算重试延迟：`delay = min(base * 2^(retry_count - 1), retry_max_seconds)`，其中 `base = config.pusher.retry_base_seconds`，`retry_max_seconds` 为退避上限。当 `retry_count >= max_retries` 时，记录 SHALL 标记为 `dead` 终态。原线性退避 `delay = retry_count * retry_base_seconds` SHALL 被替换。
 
 #### Scenario: First retry scheduled
 
 - **WHEN** a push fails and `retry_count` becomes 1
-- **THEN** `next_retry_at` SHALL be set to `now + retry_base_seconds`
+- **THEN** `next_retry_at` SHALL be set to `now + retry_base_seconds`（即 `base * 2^0`）
 
 #### Scenario: Second retry with longer backoff
 
 - **WHEN** a push fails and `retry_count` becomes 2
-- **THEN** `next_retry_at` SHALL be set to `now + 2 * retry_base_seconds`
+- **THEN** `next_retry_at` SHALL be set to `now + base * 2^1 = now + 2 * retry_base_seconds`
 
-#### Scenario: Max retries exhausted
+#### Scenario: Third retry further doubled
+
+- **WHEN** a push fails and `retry_count` becomes 3
+- **THEN** `next_retry_at` SHALL be set to `now + base * 2^2 = now + 4 * retry_base_seconds`
+
+#### Scenario: Backoff capped at retry_max_seconds
+
+- **WHEN** the computed backoff delay exceeds `retry_max_seconds`（e.g., base=60s, retry_count=8, delay=7680s > max=3600s）
+- **THEN** `next_retry_at` SHALL be set to `now + retry_max_seconds`
+
+#### Scenario: Max retries exhausted — dead
 
 - **WHEN** `retry_count` reaches `config.pusher.max_retries`
-- **THEN** `next_retry_at` SHALL be set to NULL (no further retries)
+- **THEN** `next_retry_at` SHALL be NULL
+- **THEN** `status` SHALL be `dead`（而非 `failed`）
 
 ### Requirement: Optimistic locking for push records
 

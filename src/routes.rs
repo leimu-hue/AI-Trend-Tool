@@ -7,8 +7,11 @@ use axum::{
 };
 use serde_json::json;
 use sqlx::SqlitePool;
-use tower_http::{cors::{Any, CorsLayer}, trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse}};
 use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse},
+};
 use tracing::Level;
 
 use crate::config::AppConfig;

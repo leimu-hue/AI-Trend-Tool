@@ -108,11 +108,25 @@ pub struct FilterConfig {
     pub min_history_hours: u32,
 }
 
+fn default_retry_max_seconds() -> u64 {
+    3600
+}
+
+fn default_stale_timeout_minutes() -> u64 {
+    10
+}
+
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct PusherConfig {
     pub interval_seconds: u64,
     pub max_retries: u32,
     pub retry_base_seconds: u64,
+    /// Maximum backoff delay in seconds (default 3600 = 1 hour)
+    #[serde(default = "default_retry_max_seconds")]
+    pub retry_max_seconds: u64,
+    /// Minutes before a stuck processing record is recovered (default 10)
+    #[serde(default = "default_stale_timeout_minutes")]
+    pub stale_timeout_minutes: u64,
 }
 
 impl AppConfig {
@@ -147,6 +161,12 @@ impl AppConfig {
         }
         if self.pusher.max_retries == 0 {
             return Err("pusher.max_retries must be > 0".into());
+        }
+        if self.pusher.retry_max_seconds == 0 {
+            return Err("pusher.retry_max_seconds must be > 0".into());
+        }
+        if self.pusher.stale_timeout_minutes == 0 {
+            return Err("pusher.stale_timeout_minutes must be > 0".into());
         }
         // ── Logging validation ──
         if self.logging.dir.is_empty() {
@@ -203,6 +223,8 @@ mod tests {
                 interval_seconds: 10,
                 max_retries: 3,
                 retry_base_seconds: 60,
+                retry_max_seconds: 3600,
+                stale_timeout_minutes: 10,
             },
             logging: LoggingConfig::default(),
         }
