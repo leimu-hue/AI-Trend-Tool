@@ -7,10 +7,10 @@ use crate::config::FilterConfig;
 use crate::db;
 use crate::pipeline::{Pipeline, PipelineEvent};
 
-mod types;
-mod traits;
-mod matching;
 mod detection;
+mod matching;
+mod traits;
+mod types;
 mod validation;
 
 use matching::AhoCorasickMatcher;
@@ -72,12 +72,20 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     // Mark articles as matched/skipped (after successful commit)
     if !matched_ids.is_empty() {
         if let Err(e) = db::article::mark_articles_matched(pool, &matched_ids).await {
-            tracing::error!("Filter: failed to mark {} articles matched: {}", matched_ids.len(), e);
+            tracing::error!(
+                "Filter: failed to mark {} articles matched: {}",
+                matched_ids.len(),
+                e
+            );
         }
     }
     if !skipped_ids.is_empty() {
         if let Err(e) = db::article::mark_articles_skipped(pool, &skipped_ids).await {
-            tracing::error!("Filter: failed to mark {} articles skipped: {}", skipped_ids.len(), e);
+            tracing::error!(
+                "Filter: failed to mark {} articles skipped: {}",
+                skipped_ids.len(),
+                e
+            );
         }
     }
 

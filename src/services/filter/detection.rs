@@ -82,7 +82,12 @@ pub(super) async fn detect_and_push(
             .unwrap_or((0.0, 0.0));
 
         let hot_event = match upsert_hot_event_record(
-            &mut tx, kw.id, current_hour, current_count, mean, stddev,
+            &mut tx,
+            kw.id,
+            current_hour,
+            current_count,
+            mean,
+            stddev,
         )
         .await
         {
@@ -90,7 +95,9 @@ pub(super) async fn detect_and_push(
             Err(e) => {
                 tracing::error!(
                     "Filter: failed to upsert hot_event (kw={}, hour={}): {}",
-                    kw.id, current_hour, e
+                    kw.id,
+                    current_hour,
+                    e
                 );
                 continue;
             }
@@ -113,7 +120,9 @@ pub(super) async fn detect_and_push(
 
             let channel_ids: Vec<i64> = enabled_channels.iter().map(|c| c.id).collect();
             match db::push_record::insert_push_records_for_event_tx(
-                &mut tx, hot_event.id, &channel_ids,
+                &mut tx,
+                hot_event.id,
+                &channel_ids,
             )
             .await
             {
@@ -124,7 +133,8 @@ pub(super) async fn detect_and_push(
                 Err(e) => {
                     tracing::error!(
                         "Filter: failed to insert push_records for hot_event {}: {}",
-                        hot_event.id, e
+                        hot_event.id,
+                        e
                     );
                 }
             }
