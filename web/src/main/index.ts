@@ -57,12 +57,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
 
-  // Clipboard IPC handlers (sandbox preload cannot import electron.clipboard directly)
+  // Clipboard IPC handler (sandbox preload cannot import electron.clipboard directly)
   ipcMain.handle('clipboard:writeText', (_event, text: string) => {
     clipboard.writeText(text)
-  })
-  ipcMain.handle('clipboard:readText', () => {
-    return clipboard.readText()
   })
 
   createWindow()

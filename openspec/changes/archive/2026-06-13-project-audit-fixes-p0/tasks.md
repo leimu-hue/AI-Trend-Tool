@@ -33,5 +33,5 @@
 
 - [x] 6.1 后端编译 + 测试 — `cargo build && cargo test`
 - [x] 6.2 前端编译 — `cd web && npm run build`
-- [ ] 6.3 手动验证 token 创建流程 — 启动后端，创建新 token，确认日志仅显示掩码
-- [ ] 6.4 手动验证 CSP 配置 — 生产构建前端，确认 API 请求不被 CSP 拦截
+- [x] 6.3 手动验证 token 创建流程 — 启动后端，创建新 token，确认日志仅显示掩码
+- [x] 6.4 手动验证 CSP 配置 — 生产构建前端，确认 API 请求不被 CSP 拦截

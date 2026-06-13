@@ -1,6 +1,6 @@
 import { App } from 'antd'
 import { useEffect } from 'react'
-import { setNotificationApi } from '../lib/notification'
+import { setNotificationApi, clearNotificationApi } from '../lib/notification'
 
 /**
  * 通知 hook —— 通过 App.useApp() 获取上下文感知 notification API，
@@ -13,6 +13,9 @@ export function useNotificationBridge() {
 
   useEffect(() => {
     setNotificationApi(notification)
+    return () => {
+      clearNotificationApi()
+    }
   }, [notification])
 
   return notification

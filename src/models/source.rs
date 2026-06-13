@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use validator::Validate;
 
 #[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct DataSource {
@@ -18,11 +19,13 @@ pub struct DataSource {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateSourceRequest {
     #[serde(rename = "type")]
     pub source_type: String,
+    #[validate(length(min = 1, message = "name must not be empty"))]
     pub name: String,
+    #[validate(url(message = "url must be a valid URL"))]
     pub url: String,
     pub interval_seconds: Option<i64>,
     pub config: Option<String>,

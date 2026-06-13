@@ -8,26 +8,21 @@ Input validation for all mutation handler endpoints, rejecting empty strings, in
 
 ### Requirement: Source handler input validation
 
-The system SHALL validate input for `POST /api/v1/sources` and `POST /api/v1/sources/{id}/update` handlers, returning 400 Bad Request for invalid input.
+The system SHALL validate input for `POST /api/v1/sources` and `POST /api/v1/sources/{id}/update` handlers using `validator` crate derive macros on request structs, returning 400 Bad Request for invalid input.
 
 #### Scenario: Empty name rejected for create source
 
 - **WHEN** `POST /api/v1/sources` body contains `name` as empty string or whitespace-only
-- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "name must not be empty"}}`
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "<validation error>"}}`
 
-#### Scenario: Empty URL rejected for create source
+#### Scenario: Invalid URL rejected for create source
 
-- **WHEN** `POST /api/v1/sources` body contains `url` as empty string or whitespace-only
-- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "url must not be empty"}}`
-
-#### Scenario: Invalid URL scheme rejected for create source
-
-- **WHEN** `POST /api/v1/sources` body contains `url` not starting with `http://` or `https://`
-- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "url must start with http:// or https://"}}`
+- **WHEN** `POST /api/v1/sources` body contains `url` not parseable as a valid URL
+- **THEN** the response SHALL be HTTP 400 with `{"error": {"code": "BAD_REQUEST", "message": "<validation error>"}}`
 
 ### Requirement: Keyword handler input validation
 
-The system SHALL validate input for `POST /api/v1/keywords` and `POST /api/v1/keywords/{id}/update` handlers, returning 400 Bad Request for invalid input.
+The system SHALL validate input for `POST /api/v1/keywords` and `POST /api/v1/keywords/{id}/update` handlers using `validator` crate derive macros.
 
 #### Scenario: Empty word rejected for create keyword
 
@@ -65,7 +60,7 @@ The system SHALL validate input for `POST /api/v1/channels` and `POST /api/v1/ch
 
 ### Requirement: Token handler input validation
 
-The system SHALL validate input for `POST /api/v1/tokens` handler, returning 400 Bad Request for invalid input.
+The system SHALL validate input for `POST /api/v1/tokens` handler using `validator` crate derive macros.
 
 #### Scenario: Empty name rejected for create token
 

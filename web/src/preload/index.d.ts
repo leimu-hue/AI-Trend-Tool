@@ -6,7 +6,6 @@ export interface ElectronAPI {
   }
   clipboard: {
     writeText: (text: string) => Promise<void>
-    readText: () => Promise<string>
   }
 }
 

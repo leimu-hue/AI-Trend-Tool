@@ -159,7 +159,7 @@ export default function Layout() {
             LIVE
           </div>
           <div className="font-mono text-[10px] text-muted uppercase tracking-[0.08em]">
-            监控中 · 每5分钟自动刷新
+            监控中
           </div>
         </div>
       </aside>

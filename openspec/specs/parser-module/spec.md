@@ -8,7 +8,7 @@ Background service that periodically scans enabled RSS data sources, fetches the
 
 ### Requirement: Parser background scheduling
 
-The system SHALL run the Parser module as an asynchronous background task that uses `tokio::select!` to listen for three signals: cancellation token (graceful shutdown), configurable interval tick (fallback polling), and pipeline events. The polling interval SHALL be configurable via `config.toml` (`parser.interval_seconds`).
+The system SHALL run the Parser module as an asynchronous background task that uses `tokio::select!` to listen for three signals: cancellation token (graceful shutdown), configurable interval tick (fallback polling), and pipeline events. The system SHALL use `tokio::task::JoinSet` to manage spawned fetch sub-tasks. On shutdown, the system SHALL wait for all in-flight fetch tasks to complete before exiting.
 
 #### Scenario: Parser scans on configurable interval
 
@@ -28,7 +28,9 @@ The system SHALL run the Parser module as an asynchronous background task that u
 #### Scenario: Parser shuts down gracefully
 
 - **WHEN** the global `CancellationToken` is cancelled
-- **THEN** the Parser SHALL log a shutdown message and break out of its loop
+- **THEN** the Parser SHALL log a shutdown message
+- **THEN** the Parser SHALL await all in-flight fetch tasks via `JoinSet::join_next()`
+- **THEN** the Parser SHALL break out of its loop after all tasks complete
 
 ### Requirement: RSS feed parsing
 

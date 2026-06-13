@@ -91,16 +91,24 @@ impl Parser for RssParser {
 /// Uses `tokio::select!` to listen for cancellation while periodically
 /// querying due sources at the configured `interval_seconds`.
 /// Spawns concurrent fetch tasks limited by `config.parser.max_concurrent_fetches`.
+/// Uses `JoinSet` to track spawned tasks and wait for them on shutdown.
 pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig, pipeline: Pipeline) {
     let parser = Arc::new(RssParser::new(&config));
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent_fetches));
     let mut interval =
         tokio::time::interval(std::time::Duration::from_secs(config.interval_seconds));
+    let mut joinset = tokio::task::JoinSet::new();
 
     loop {
         tokio::select! {
             _ = pipeline.cancel.cancelled() => {
-                tracing::info!("Parser: shutting down gracefully");
+                tracing::info!("Parser: shutting down gracefully, waiting for {} in-flight task(s)", joinset.len());
+                while let Some(result) = joinset.join_next().await {
+                    if let Err(e) = result {
+                        tracing::error!("Parser: in-flight task panicked: {}", e);
+                    }
+                }
+                tracing::info!("Parser: all in-flight tasks complete");
                 break;
             }
             _ = interval.tick() => {}
@@ -126,7 +134,7 @@ pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig, pipeline:
             let permit = Arc::clone(&semaphore);
             let pipeline = pipeline.clone();
 
-            tokio::spawn(async move {
+            joinset.spawn(async move {
                 let _permit = permit.acquire().await;
 
                 let result = parser.fetch_and_parse(&source).await;

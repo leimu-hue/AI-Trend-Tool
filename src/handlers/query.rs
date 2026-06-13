@@ -50,14 +50,14 @@ pub async fn list_articles(
     State(state): State<AppState>,
     Query(params): Query<ArticleListParams>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).min(100);
     let query = ArticleQuery {
-        page: params.page,
-        per_page: params.per_page,
+        page: Some(page),
+        per_page: Some(per_page),
         source_id: params.source_id,
         processed: params.processed,
     };
-    let page = query.page.unwrap_or(1);
-    let per_page = query.per_page.unwrap_or(20);
 
     let items = db::article::list_articles(&state.pool, &query).await?;
     let total = db::article::count_articles(&state.pool, &query).await?;
@@ -130,7 +130,7 @@ pub async fn get_trend(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Keyword {} not found", keyword_id)))?;
 
-    let hours = params.hours.unwrap_or(24);
+    let hours = params.hours.unwrap_or(24).clamp(1, 8760);
     let rows = db::hot_event::get_hourly_counts(&state.pool, keyword_id, hours as i32).await?;
 
     let points: Vec<TrendPoint> = rows
@@ -176,6 +176,7 @@ pub async fn trigger_filter(
 pub async fn trigger_pusher(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    crate::services::pusher::run_pusher_once(&state.pool, &state.config.pusher).await;
+    let client = reqwest::Client::new();
+    crate::services::pusher::run_pusher_once(&state.pool, &state.config.pusher, &client).await;
     Ok(ApiResponse::ok(json!({"message": "Pusher executed"})))
 }

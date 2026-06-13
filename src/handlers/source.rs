@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use validator::Validate;
 
 use crate::db;
 use crate::error::{ApiResponse, AppError};
@@ -15,7 +16,7 @@ use crate::routes::AppState;
 pub async fn list_sources(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let sources: Vec<DataSource> = db::source::list_sources(&state.pool).await?;
+    let sources = db::source::list_sources_with_count(&state.pool).await?;
     Ok(ApiResponse::ok(sources))
 }
 
@@ -28,17 +29,7 @@ pub async fn create_source(
     State(state): State<AppState>,
     Json(req): Json<CreateSourceRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    if req.name.trim().is_empty() {
-        return Err(AppError::BadRequest("name must not be empty".into()));
-    }
-    if req.url.trim().is_empty() {
-        return Err(AppError::BadRequest("url must not be empty".into()));
-    }
-    if !req.url.starts_with("http://") && !req.url.starts_with("https://") {
-        return Err(AppError::BadRequest(
-            "url must start with http:// or https://".into(),
-        ));
-    }
+    req.validate()?;
 
     let source: DataSource = db::source::create_source(&state.pool, &req).await?;
     Ok(ApiResponse::created(source))

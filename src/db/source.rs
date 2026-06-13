@@ -1,6 +1,25 @@
+use serde::Serialize;
 use sqlx::SqlitePool;
 
 use crate::models::source::{CreateSourceRequest, DataSource, UpdateSourceRequest};
+
+/// DataSource with article count from LEFT JOIN
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct SourceWithCount {
+    pub id: i64,
+    #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
+    pub source_type: String,
+    pub name: String,
+    pub url: String,
+    pub config: String,
+    pub enabled: bool,
+    pub interval_seconds: i64,
+    pub last_fetched_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+    pub article_count: i64,
+}
 
 pub async fn create_source(
     pool: &SqlitePool,
@@ -21,10 +40,27 @@ pub async fn create_source(
     .await
 }
 
+#[allow(dead_code)]
 pub async fn list_sources(pool: &SqlitePool) -> Result<Vec<DataSource>, sqlx::Error> {
     sqlx::query_as::<_, DataSource>("SELECT * FROM data_sources ORDER BY created_at DESC")
         .fetch_all(pool)
         .await
+}
+
+pub async fn list_sources_with_count(
+    pool: &SqlitePool,
+) -> Result<Vec<SourceWithCount>, sqlx::Error> {
+    sqlx::query_as::<_, SourceWithCount>(
+        "SELECT ds.id, ds.type, ds.name, ds.url, ds.config, ds.enabled, \
+         ds.interval_seconds, ds.last_fetched_at, ds.created_at, ds.updated_at, \
+         COUNT(a.id) as article_count \
+         FROM data_sources ds \
+         LEFT JOIN articles a ON a.source_id = ds.id \
+         GROUP BY ds.id \
+         ORDER BY ds.created_at DESC",
+    )
+    .fetch_all(pool)
+    .await
 }
 
 pub async fn get_source_by_id(

@@ -92,3 +92,74 @@ impl AppConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_config() -> AppConfig {
+        AppConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 3000,
+            },
+            database: DatabaseConfig {
+                path: "data/hotspot.db".into(),
+            },
+            auth: AuthConfig {
+                initial_token: None,
+            },
+            parser: ParserConfig {
+                max_concurrent_fetches: 10,
+                default_user_agent: "Test/1.0".into(),
+                default_timeout_seconds: 30,
+                interval_seconds: 30,
+            },
+            filter: FilterConfig {
+                batch_size: 100,
+                interval_seconds: 300,
+                history_hours: 24,
+                min_history_hours: 2,
+            },
+            pusher: PusherConfig {
+                interval_seconds: 10,
+                max_retries: 3,
+                retry_base_seconds: 60,
+            },
+        }
+    }
+
+    #[test]
+    fn valid_config_passes() {
+        let config = valid_config();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn port_zero_rejected() {
+        let mut config = valid_config();
+        config.server.port = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn empty_db_path_rejected() {
+        let mut config = valid_config();
+        config.database.path = "".into();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn zero_max_concurrent_fetches_rejected() {
+        let mut config = valid_config();
+        config.parser.max_concurrent_fetches = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn zero_batch_size_rejected() {
+        let mut config = valid_config();
+        config.filter.batch_size = 0;
+        assert!(config.validate().is_err());
+    }
+}

@@ -51,6 +51,9 @@ sha2 = "0.10"
 # Concurrent stream processing
 futures = "0.3"
 
+# Input validation
+validator = { version = "0.19", features = ["derive"] }
+
 # ─── Profile: Release (production build) ───
 [profile.release]
 opt-level = 3          # Maximum optimization

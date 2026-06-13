@@ -34,6 +34,7 @@ The system SHALL provide a `GET /api/v1/articles` endpoint that returns paginate
 
 - **WHEN** client sends `GET /api/v1/articles?per_page=500` with valid Bearer token
 - **THEN** system treats `per_page` as 100 (maximum)
+- **THEN** response `per_page` SHALL be 100, not 500
 
 #### Scenario: Unauthenticated request
 
@@ -54,6 +55,11 @@ The system SHALL provide a `GET /api/v1/hotspots` endpoint that returns paginate
 - **WHEN** client sends `GET /api/v1/hotspots?keyword_id=5` with valid Bearer token
 - **THEN** system returns 200 with only hotspots for keyword ID 5
 
+#### Scenario: Per page cap reflected in response
+
+- **WHEN** client sends `GET /api/v1/hotspots?per_page=200` with valid Bearer token
+- **THEN** response `per_page` SHALL be 100, reflecting the clamp
+
 ### Requirement: Push records for a hotspot
 
 The system SHALL provide a `GET /api/v1/hotspots/{id}/push-records` endpoint that returns all push records for a given hotspot event.
@@ -70,7 +76,7 @@ The system SHALL provide a `GET /api/v1/hotspots/{id}/push-records` endpoint tha
 
 ### Requirement: Keyword trend data
 
-The system SHALL provide a `GET /api/v1/trend/{keyword_id}` endpoint that returns hourly count data points for a keyword using data from the `hot_events` table.
+The system SHALL provide a `GET /api/v1/trend/{keyword_id}` endpoint that returns hourly count data points for a keyword using data from the `hot_events` table. The `hours` parameter SHALL be clamped to range 1..8760 (1 year max) and safely cast to i32.
 
 #### Scenario: Get trend for existing keyword with default hours
 
@@ -81,6 +87,12 @@ The system SHALL provide a `GET /api/v1/trend/{keyword_id}` endpoint that return
 
 - **WHEN** client sends `GET /api/v1/trend/3?hours=48` with valid Bearer token
 - **THEN** system returns 200 with points covering the last 48 hours
+
+#### Scenario: Hours parameter clamped to safe range
+
+- **WHEN** client sends `GET /api/v1/trend/3?hours=2147483648` (exceeds i32::MAX)
+- **THEN** system SHALL clamp hours to 8760 (1 year max) instead of truncating
+- **THEN** the query SHALL execute successfully without negative hour values
 
 #### Scenario: Get trend for non-existent keyword
 

@@ -8,6 +8,22 @@ use crate::config::FilterConfig;
 use crate::db;
 use crate::pipeline::{Pipeline, PipelineEvent};
 
+/// Compute mean and standard deviation from a slice of hourly counts.
+/// Returns (mean, stddev). An empty slice returns (0.0, 0.0).
+pub fn compute_stats(counts: &[i32]) -> (f64, f64) {
+    if counts.is_empty() {
+        return (0.0, 0.0);
+    }
+    let n = counts.len() as f64;
+    let mean = counts.iter().map(|c| *c as f64).sum::<f64>() / n;
+    let variance = counts
+        .iter()
+        .map(|c| (*c as f64 - mean).powi(2))
+        .sum::<f64>()
+        / n;
+    (mean, variance.sqrt())
+}
+
 /// Run one filter iteration: load unprocessed articles, match keywords,
 /// detect hotspots via burst detection, create push records, mark processed.
 ///
@@ -177,16 +193,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
 
         let (mean, stddev) = kw_stats
             .get(&kw.id)
-            .map(|(counts, _)| {
-                if counts.is_empty() {
-                    (0.0, 0.0)
-                } else {
-                    let n = counts.len() as f64;
-                    let m = counts.iter().map(|c| *c as f64).sum::<f64>() / n;
-                    let v = counts.iter().map(|c| (*c as f64 - m).powi(2)).sum::<f64>() / n;
-                    (m, v.sqrt())
-                }
-            })
+            .map(|(counts, _)| compute_stats(counts))
             .unwrap_or((0.0, 0.0));
 
         // Record the hourly count in hot_events (upsert for idempotency)
@@ -325,5 +332,31 @@ pub async fn start_filter_loop(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_stats;
+
+    #[test]
+    fn empty_slice_returns_zero() {
+        let (mean, stddev) = compute_stats(&[]);
+        assert_eq!(mean, 0.0);
+        assert_eq!(stddev, 0.0);
+    }
+
+    #[test]
+    fn single_element() {
+        let (mean, stddev) = compute_stats(&[5]);
+        assert!((mean - 5.0).abs() < 0.01);
+        assert!((stddev - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn normal_data() {
+        let (mean, stddev) = compute_stats(&[2, 4, 4, 4, 5, 5, 7, 9]);
+        assert!((mean - 5.0).abs() < 0.01);
+        assert!((stddev - 2.0).abs() < 0.01);
     }
 }

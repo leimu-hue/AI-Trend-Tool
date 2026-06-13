@@ -3,8 +3,31 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use crate::models::push_record::PushRecord;
 
+/// Atomically claim pending push_records by updating status to 'processing'.
+/// Returns number of claimed rows.
+pub async fn claim_pending_records(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE push_records SET status = 'processing', updated_at = datetime('now') \
+         WHERE status = 'pending' \
+         AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))",
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+/// List push_records with status = 'processing' (claimed for delivery).
+pub async fn list_processing_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, sqlx::Error> {
+    sqlx::query_as::<_, PushRecord>(
+        "SELECT * FROM push_records WHERE status = 'processing' ORDER BY created_at ASC",
+    )
+    .fetch_all(pool)
+    .await
+}
+
 /// Insert push records for all enabled channels for a given hot event.
 /// Skips channels that already have a record (UNIQUE constraint).
+/// Logs real database errors via tracing::error.
 #[allow(dead_code)]
 pub async fn insert_push_records_for_event(
     pool: &SqlitePool,
@@ -13,7 +36,7 @@ pub async fn insert_push_records_for_event(
 ) -> Result<Vec<PushRecord>, sqlx::Error> {
     let mut records = vec![];
     for &channel_id in channel_ids {
-        if let Ok(Some(r)) = sqlx::query_as::<_, PushRecord>(
+        match sqlx::query_as::<_, PushRecord>(
             "INSERT OR IGNORE INTO push_records (hot_event_id, channel_id) VALUES (?, ?) RETURNING *",
         )
         .bind(hot_event_id)
@@ -21,13 +44,23 @@ pub async fn insert_push_records_for_event(
         .fetch_optional(pool)
         .await
         {
-            records.push(r);
+            Ok(Some(r)) => records.push(r),
+            Ok(None) => { /* UNIQUE conflict — normal dedup, skip */ }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to insert push_record for hot_event {} channel {}: {}",
+                    hot_event_id,
+                    channel_id,
+                    e
+                );
+            }
         }
     }
     Ok(records)
 }
 
 /// Transaction-aware version of insert_push_records_for_event.
+/// Logs real database errors via tracing::error.
 pub async fn insert_push_records_for_event_tx(
     tx: &mut Transaction<'_, Sqlite>,
     hot_event_id: i64,
@@ -35,7 +68,7 @@ pub async fn insert_push_records_for_event_tx(
 ) -> Result<Vec<PushRecord>, sqlx::Error> {
     let mut records = vec![];
     for &channel_id in channel_ids {
-        if let Ok(Some(r)) = sqlx::query_as::<_, PushRecord>(
+        match sqlx::query_as::<_, PushRecord>(
             "INSERT OR IGNORE INTO push_records (hot_event_id, channel_id) VALUES (?, ?) RETURNING *",
         )
         .bind(hot_event_id)
@@ -43,12 +76,22 @@ pub async fn insert_push_records_for_event_tx(
         .fetch_optional(&mut **tx)
         .await
         {
-            records.push(r);
+            Ok(Some(r)) => records.push(r),
+            Ok(None) => { /* UNIQUE conflict — normal dedup, skip */ }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to insert push_record for hot_event {} channel {} in tx: {}",
+                    hot_event_id,
+                    channel_id,
+                    e
+                );
+            }
         }
     }
     Ok(records)
 }
 
+#[allow(dead_code)]
 pub async fn list_pending_records(pool: &SqlitePool) -> Result<Vec<PushRecord>, sqlx::Error> {
     sqlx::query_as::<_, PushRecord>(
         "SELECT * FROM push_records WHERE status = 'pending' ORDER BY created_at ASC",

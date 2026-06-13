@@ -33,6 +33,10 @@ export function setNotificationApi(api: NotificationInstance): void {
   contextApi = api
 }
 
+export function clearNotificationApi(): void {
+  contextApi = null
+}
+
 /**
  * 树外错误通知（供 axios 拦截器等非 React 环境使用）
  * 优先使用缓存的上下文 API，保证主题一致性；无上下文时回退静态单例。

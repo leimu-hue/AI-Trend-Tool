@@ -1,5 +1,4 @@
 import { Component, type ReactNode } from 'react'
-import { Result, Button } from 'antd'
 
 interface Props {
   children: ReactNode
@@ -7,17 +6,16 @@ interface Props {
 
 interface State {
   hasError: boolean
-  error: Error | null
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false }
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: true }
   }
 
   componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
@@ -27,17 +25,23 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex items-center justify-center min-h-screen">
-          <Result
-            status="error"
-            title="页面出错了"
-            subTitle={this.state.error?.message || '未知错误'}
-            extra={
-              <Button type="primary" onClick={() => window.location.reload()}>
-                刷新页面
-              </Button>
-            }
-          />
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            gap: 16
+          }}
+        >
+          <h2 style={{ color: 'var(--color-fg)', margin: 0 }}>页面出错了</h2>
+          <p style={{ color: 'var(--color-muted)', margin: 0, fontSize: 14 }}>
+            请尝试刷新页面，如果问题持续请联系管理员
+          </p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            刷新页面
+          </button>
         </div>
       )
     }

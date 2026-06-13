@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use validator::Validate;
 
 use crate::db;
 use crate::error::{ApiResponse, AppError};
@@ -28,21 +29,7 @@ pub async fn create_keyword(
     State(state): State<AppState>,
     Json(req): Json<CreateKeywordRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    if req.word.trim().is_empty() {
-        return Err(AppError::BadRequest("word must not be empty".into()));
-    }
-    if let Some(sm) = req.std_multiplier {
-        if sm <= 0.0 {
-            return Err(AppError::BadRequest(
-                "std_multiplier must be positive".into(),
-            ));
-        }
-    }
-    if let Some(mhc) = req.min_hot_count {
-        if mhc <= 0 {
-            return Err(AppError::BadRequest("min_hot_count must be >= 1".into()));
-        }
-    }
+    req.validate()?;
 
     let keyword: Keyword = db::keyword::create_keyword(&state.pool, &req)
         .await

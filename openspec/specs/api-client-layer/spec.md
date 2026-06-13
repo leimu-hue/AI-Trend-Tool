@@ -11,7 +11,7 @@ The system SHALL create and export a configured Axios instance at `src/api/clien
 
 #### Scenario: Axios instance created with defaults
 - **WHEN** the client module is imported
-- **THEN** an Axios instance exists with `baseURL` matching `VITE_API_BASE_URL` (default `http://localhost:8080/api/v1`), `timeout: 30000`, and `Content-Type: application/json` header
+- **THEN** an Axios instance exists with `baseURL` matching `VITE_API_BASE_URL` (default `http://localhost:3000/api/v1`), `timeout: 30000`, and `Content-Type: application/json` header
 
 ### Requirement: Request interceptor adds Bearer token
 The system SHALL add a request interceptor that reads the token from `localStorage.getItem('api_token')` and sets the `Authorization: Bearer <token>` header on every outgoing request when a token exists.

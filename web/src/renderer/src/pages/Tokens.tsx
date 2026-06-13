@@ -87,25 +87,15 @@ export default function Tokens() {
     }
   }
 
-  function handleCopy(text: string) {
+  async function handleCopy(text: string) {
     if (!text) {
       toast.error('没有可复制的内容')
       return
     }
-    // 使用 textarea + execCommand —— 在 Electron 所有环境中可靠工作
-    // 避免 navigator.clipboard 在 contextIsolation 下 Promise resolve 但不写入剪贴板的问题
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.setAttribute('readonly', '')
-    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0'
-    document.body.appendChild(ta)
-    ta.select()
-    ta.setSelectionRange(0, text.length)
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    if (ok) {
+    try {
+      await window.electronAPI.clipboard.writeText(text)
       toast.info('令牌已复制')
-    } else {
+    } catch {
       toast.error('复制失败')
     }
   }

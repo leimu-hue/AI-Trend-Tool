@@ -76,6 +76,21 @@ The `/health` endpoint SHALL NOT require authentication. Only routes under `/api
 - **WHEN** `GET /health` is called without any Authorization header
 - **THEN** the server SHALL return HTTP 200 with `{"status": "ok"}`
 
+### Requirement: CORS 显式方法白名单
+
+CORS 中间件 SHALL 使用显式 HTTP 方法白名单替代 `CorsLayer::permissive()`。允许的方法包括 GET、POST、PUT、DELETE、OPTIONS。Origin 和 Headers 保持 `Any`（兼容 Electron file:// 协议）。
+
+#### Scenario: 允许的 HTTP 方法通过 CORS
+
+- **WHEN** 跨域请求使用 GET、POST、PUT、DELETE 或 OPTIONS 方法
+- **THEN** CORS 中间件 SHALL 返回对应的 `Access-Control-Allow-Methods` 头
+- **THEN** 请求 SHALL 正常通过
+
+#### Scenario: 不允许的 HTTP 方法被拒绝
+
+- **WHEN** 跨域请求使用 PATCH、HEAD 或其他未列出的方法
+- **THEN** CORS 中间件 SHALL 拒绝该预检请求
+
 ### Requirement: Auth middleware follows 2018 edition module style
 
 The auth middleware implementation SHALL reside at `src/middleware/auth.rs` and be declared via `pub mod auth;` in `src/middleware.rs`. No `src/middleware/mod.rs` file SHALL exist.

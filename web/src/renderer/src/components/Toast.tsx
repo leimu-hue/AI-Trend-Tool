@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 
 type ToastType = 'success' | 'error' | 'info'
 
@@ -26,6 +26,15 @@ const TIMINGS: Record<ToastType, number> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const nextId = useRef(0)
+  const timersRef = useRef<Set<number>>(new Set())
+
+  // Cleanup all active timers on unmount
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((id) => clearTimeout(id))
+      timersRef.current.clear()
+    }
+  }, [])
 
   const remove = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -37,10 +46,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => [...prev, { id, type, message, exiting: false }])
 
       const duration = TIMINGS[type]
-      setTimeout(() => {
+      const timer1 = window.setTimeout(() => {
+        timersRef.current.delete(timer1)
         setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)))
-        setTimeout(() => remove(id), 300)
+        const timer2 = window.setTimeout(() => {
+          timersRef.current.delete(timer2)
+          remove(id)
+        }, 300)
+        timersRef.current.add(timer2)
       }, duration)
+      timersRef.current.add(timer1)
     },
     [remove]
   )

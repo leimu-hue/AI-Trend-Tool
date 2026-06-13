@@ -130,13 +130,14 @@ The system SHALL collect all keyword-article mention pairs during the matching p
 
 ### Requirement: Hot event upsert uses ON CONFLICT
 
-The system SHALL upsert hot_event records using SQLite's `ON CONFLICT(keyword_id, hour_bucket) DO UPDATE` syntax to preserve the row's `id` and maintain foreign key integrity with `push_records`.
+The system SHALL upsert hot_event records using SQLite's `ON CONFLICT(keyword_id, hour_bucket) DO UPDATE` syntax to preserve the row's `id` and maintain foreign key integrity with `push_records`. The upsert and push_records insert SHALL be wrapped in a single database transaction.
 
 #### Scenario: First hotspot for keyword in hour — insert
 
 - **WHEN** a hotspot is detected and no existing row matches the (keyword_id, hour_bucket) pair
-- **THEN** the system SHALL INSERT a new `hot_events` row
-- **THEN** push_records SHALL be created referencing the new row's id
+- **THEN** the system SHALL INSERT a new `hot_events` row within a transaction
+- **THEN** push_records SHALL be created referencing the new row's id within the same transaction
+- **THEN** the transaction SHALL COMMIT before marking articles as processed
 
 #### Scenario: Repeat detection in same hour — update
 
@@ -144,6 +145,13 @@ The system SHALL upsert hot_event records using SQLite's `ON CONFLICT(keyword_id
 - **THEN** the system SHALL UPDATE the existing row's `count`, `mean_historical`, and `stddev_historical`
 - **THEN** the row's `id` SHALL NOT change
 - **THEN** existing push_records referencing this hot_event SHALL remain valid
+
+#### Scenario: Transaction failure rolls back
+
+- **WHEN** push_records insert fails within the transaction (e.g., FK violation)
+- **THEN** the transaction SHALL ROLLBACK
+- **THEN** hot_event changes SHALL be reverted
+- **THEN** articles SHALL NOT be marked as processed
 
 ### Requirement: Historical statistics use batch query
 
@@ -169,3 +177,21 @@ The system SHALL mark all processed articles by setting `processed_at = datetime
 
 - **WHEN** the filter completes matching for a batch
 - **THEN** all articles in that batch SHALL have `processed_at` updated in chunks of 100
+
+### Requirement: compute_stats 纯函数
+
+系统 SHALL 提取 `compute_stats(counts: &[i32]) -> (f64, f64)` 纯函数，计算数组的均值和标准差。该函数 SHALL 有单元测试覆盖。
+
+#### Scenario: 空数组
+- **WHEN** `compute_stats(&[])` 被调用
+- **THEN** 返回值 SHALL 为 `(0.0, 0.0)`
+
+#### Scenario: 单元素
+- **WHEN** `compute_stats(&[5])` 被调用
+- **THEN** 均值 SHALL 为 5.0
+- **THEN** 标准差 SHALL 为 0.0
+
+#### Scenario: 多元素正常分布
+- **WHEN** `compute_stats(&[2, 4, 4, 4, 5, 5, 7, 9])` 被调用
+- **THEN** 均值 SHALL 约等于 5.0
+- **THEN** 标准差 SHALL 约等于 2.0

@@ -60,6 +60,12 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
+impl From<validator::ValidationErrors> for AppError {
+    fn from(errors: validator::ValidationErrors) -> Self {
+        AppError::BadRequest(errors.to_string())
+    }
+}
+
 pub struct ApiResponse;
 
 impl ApiResponse {
@@ -77,5 +83,23 @@ impl ApiResponse {
     #[allow(dead_code)]
     pub fn no_content() -> StatusCode {
         StatusCode::NO_CONTENT
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    #[test]
+    fn not_found_returns_404() {
+        let response = AppError::NotFound("test".into()).into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn database_error_returns_500() {
+        let response = AppError::Database(sqlx::Error::PoolTimedOut).into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

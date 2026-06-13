@@ -26,12 +26,12 @@ interface SettingsData {
 
 const DEFAULTS: SettingsData = {
   parser: {
-    max_concurrent_fetches: 5,
+    max_concurrent_fetches: 10,
     default_timeout_seconds: 30,
     interval_seconds: 30
   },
   filter: {
-    batch_size: 100,
+    batch_size: 1000,
     interval_seconds: 300,
     history_hours: 24,
     min_history_hours: 4

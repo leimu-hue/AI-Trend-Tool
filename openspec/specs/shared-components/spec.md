@@ -7,15 +7,8 @@ Provide reusable UI components for loading, empty states, error boundaries, and 
 ## Requirements
 
 ### Requirement: Loading component
-The system SHALL provide a `Loading` component that wraps antd `Spin` with optional full-page centering.
 
-#### Scenario: Default loading
-- **WHEN** `Loading` is rendered without props
-- **THEN** a centered container (min-height 200px) displays antd `Spin` with "加载中..." text in `var(--muted)` color
-
-#### Scenario: Full-page loading
-- **WHEN** `Loading` is rendered with `fullPage` prop
-- **THEN** the container has `min-height: 100vh` for full-viewport centering
+**REMOVED**: `Loading` component is dead code — not imported by any module in the project. Removed. Use antd `Spin` directly where loading indicators are needed.
 
 ### Requirement: Empty state component
 The system SHALL provide an `Empty` component that wraps antd `Empty` with custom description and optional call-to-action.
@@ -29,22 +22,21 @@ The system SHALL provide an `Empty` component that wraps antd `Empty` with custo
 - **THEN** an antd `Button` with "添加数据源" is displayed below the description and calls `onAction` when clicked
 
 ### Requirement: Error boundary component
-The system SHALL provide an `ErrorBoundary` class component that catches JavaScript errors in its child component tree and displays a fallback UI using antd `Result`.
+The system SHALL provide an `ErrorBoundary` class component that catches JavaScript errors in its child component tree and displays a fallback UI. The UI SHALL show a generic, user-friendly message without exposing internal error details. Detailed error information SHALL only be output to `console.error`.
 
 #### Scenario: Error boundary catches render error
 - **WHEN** a child component throws an error during rendering
-- **THEN** the ErrorBoundary displays antd `Result` with:
-  - `status="error"`
-  - `title="页面出错了"`
-  - `subTitle` set to the error message
-  - `extra` containing an antd `Button` "刷新页面" that calls `window.location.reload()`
+- **THEN** the ErrorBoundary displays a generic message "页面出错了"
+- **THEN** the page SHALL show "请尝试刷新页面，如果问题持续请联系管理员"
+- **THEN** the detailed error SHALL be logged via `console.error`
+- **THEN** the error message SHALL NOT be displayed in the UI
 
 #### Scenario: Error boundary logs errors
 - **WHEN** the ErrorBoundary catches an error
 - **THEN** the error and component stack SHALL be logged via `console.error`
 
 ### Requirement: Notification hook
-The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().notification` for type-safe notification calls with bottom-right placement.
+The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().notification` for type-safe notification calls with bottom-right placement. The `useNotificationBridge` SHALL cleanup its module-level cache (`contextApi`) on component unmount.
 
 #### Scenario: Success notification
 - **WHEN** `showMessage.success("保存成功")` is called from a component within `<App>`
@@ -57,6 +49,11 @@ The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().not
 #### Scenario: Info notification
 - **WHEN** `showMessage.info("提示信息")` is called
 - **THEN** a dark-themed info notification appears at bottom-right and auto-dismisses after 2 seconds
+
+#### Scenario: Module cache cleaned up on unmount
+- **WHEN** `App` component unmounts (e.g., HMR)
+- **THEN** `contextApi` SHALL be set to `null` in the cleanup function
+- **THEN** subsequent calls to notification functions SHALL not reference the stale instance
 
 ### Requirement: Toast notification hook (custom CSS)
 系统 SHALL 提供基于自定义 CSS 的 Toast 通知系统（`useToast` hook + `ToastProvider`），支持 success / error / info 三种类型，不依赖 antd。
@@ -84,3 +81,8 @@ The system SHALL provide a `useMessage` hook that wraps antd's `App.useApp().not
 #### Scenario: Toast renders outside React tree context
 - **WHEN** `useToast` 在 `ToastProvider` 外调用
 - **THEN** 静默失败，不抛出异常，不显示 toast
+
+#### Scenario: Toast timers cleaned up on unmount
+- **WHEN** `ToastProvider` component unmounts (e.g., HMR hot reload)
+- **THEN** all active `setTimeout` timers SHALL be cleared via `clearTimeout`
+- **THEN** no React state update warnings SHALL appear in the console

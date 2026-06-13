@@ -7,7 +7,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     electron: process.versions.electron
   },
   clipboard: {
-    writeText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
-    readText: () => ipcRenderer.invoke('clipboard:readText')
+    writeText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text)
   }
 })

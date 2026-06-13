@@ -10,12 +10,13 @@
 - **THEN** 事务 SHALL COMMIT
 - **THEN** 标记文章为已处理的操作 SHALL 在事务提交后执行
 
-#### Scenario: push_records insert 失败 — 事务回滚
+#### Scenario: push_records insert 失败 — 继续处理其他关键词
 
-- **WHEN** hot_event upsert 成功但 push_records insert 失败（如外键违反）
-- **THEN** 事务 SHALL ROLLBACK
-- **THEN** hot_event 的 upsert 变更 SHALL 被撤销
-- **THEN** 文章 SHALL NOT 被标记为已处理（下次 filter 运行重新处理）
+- **WHEN** 某个关键词的 push_records insert 失败（如外键违反）
+- **THEN** 系统 SHALL 记录错误日志
+- **THEN** 该关键词的 hot_event 仍被持久化
+- **THEN** 其他关键词的 hot_event 和 push_records SHALL 正常处理
+- **THEN** 事务成功后文章 SHALL 被标记为已处理
 
 #### Scenario: 事务失败不标记已处理
 

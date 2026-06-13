@@ -28,12 +28,10 @@ pub async fn ensure_initial_token(
         // Tokens already exist — print masked form of the first non-revoked one
         if let Some(token) = db::token::get_first_active_token(pool).await? {
             let t = &token.token;
-            let masked = if t.len() > 8 {
+            let masked = if t.len() >= 8 {
                 format!("{}...{}", &t[..4], &t[t.len() - 4..])
-            } else if t.len() > 4 {
-                format!("{}...", &t[..4])
             } else {
-                "***".to_string()
+                "****".to_string()
             };
             tracing::info!("============================================");
             tracing::info!("  Active token: {}", masked);
@@ -92,7 +90,12 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
 
     // Config path from first CLI argument, default to "config.toml"
     let config_path = std::env::args()
@@ -103,11 +106,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Ensure data directory exists
     let db_dir = std::path::Path::new(&config.database.path)
         .parent()
-        .unwrap();
+        .ok_or("database.path has no parent directory — specify an absolute or relative path with at least one parent")?;
     std::fs::create_dir_all(db_dir)?;
 
     // Initialize database connection pool
-    let pool = db::init_pool(&config.database.path).await?;
+    let pool = db::init_pool(&config.database.path, config.parser.max_concurrent_fetches).await?;
 
     // Run migrations (with auto-recovery for checksum mismatches)
     run_migrations(&pool).await?;

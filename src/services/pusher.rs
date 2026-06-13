@@ -7,16 +7,22 @@ use crate::config::PusherConfig;
 use crate::db;
 use crate::pipeline::{Pipeline, PipelineEvent};
 
-/// Run one pusher iteration: poll pushable records, send webhooks,
-/// update status with exponential backoff.
+/// Run one pusher iteration: atomically claim pending records, poll processing
+/// and retry-due records, send webhooks, update status with exponential backoff.
 ///
 /// Shared by the background loop and manual trigger endpoint.
-pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig) {
-    // 1. Poll pending and retry-due records
-    let pending = match db::push_record::list_pending_records(pool).await {
+pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig, client: &reqwest::Client) {
+    // 1. Atomically claim pending records
+    if let Err(e) = db::push_record::claim_pending_records(pool).await {
+        tracing::error!("Pusher: failed to claim pending records: {}", e);
+        return;
+    }
+
+    // 2. Poll processing records (atomically claimed) and retry-due records
+    let processing = match db::push_record::list_processing_records(pool).await {
         Ok(records) => records,
         Err(e) => {
-            tracing::error!("Pusher: failed to list pending records: {}", e);
+            tracing::error!("Pusher: failed to list processing records: {}", e);
             return;
         }
     };
@@ -29,7 +35,7 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig) {
         }
     };
 
-    let pushable: Vec<_> = pending.into_iter().chain(retry_due).collect();
+    let pushable: Vec<_> = processing.into_iter().chain(retry_due).collect();
 
     if pushable.is_empty() {
         return;
@@ -37,9 +43,7 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig) {
 
     tracing::info!("Pusher: {} pushable record(s)", pushable.len());
 
-    // 2. Process each record concurrently (max 8 concurrent)
-    let client = reqwest::Client::new();
-
+    // 3. Process each record concurrently (max 8 concurrent)
     futures::stream::iter(&pushable)
         .for_each_concurrent(8, |record| {
             let pool = pool.clone();
@@ -266,6 +270,7 @@ pub async fn start_pusher_loop(
     pipeline: Pipeline,
     mut push_rx: mpsc::Receiver<PipelineEvent>,
 ) {
+    let client = reqwest::Client::new();
     let mut interval =
         tokio::time::interval(std::time::Duration::from_secs(config.interval_seconds));
 
@@ -276,10 +281,10 @@ pub async fn start_pusher_loop(
                 break;
             }
             _ = interval.tick() => {
-                run_pusher_once(&pool, &config).await;
+                run_pusher_once(&pool, &config, &client).await;
             }
             Some(_) = push_rx.recv() => {
-                run_pusher_once(&pool, &config).await;
+                run_pusher_once(&pool, &config, &client).await;
             }
         }
     }

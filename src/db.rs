@@ -9,10 +9,14 @@ pub mod token;
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
-pub async fn init_pool(database_path: &str) -> Result<SqlitePool, sqlx::Error> {
+pub async fn init_pool(
+    database_path: &str,
+    max_concurrent_fetches: usize,
+) -> Result<SqlitePool, sqlx::Error> {
+    let max_connections = (max_concurrent_fetches + 5).max(15) as u32;
     let db_url = format!("sqlite:{}?mode=rwc", database_path);
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(max_connections)
         .connect(&db_url)
         .await?;
 

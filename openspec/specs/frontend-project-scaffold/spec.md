@@ -25,6 +25,21 @@ The system SHALL provide a working Electron desktop application project at `web/
 - **WHEN** the Electron main process creates a BrowserWindow
 - **THEN** `nodeIntegration` SHALL be `false`, `contextIsolation` SHALL be `true`, and `sandbox` SHALL be `true`
 
+#### Scenario: 生产环境 CSP 使用端口通配符
+- **WHEN** 应用以生产模式构建
+- **THEN** CSP `connect-src` SHALL 为 `'self' http://localhost:*`
+- **THEN** 允许连接到 localhost 的任意端口，匹配用户配置的后端端口
+
+### Requirement: Electron security defaults
+
+The system SHALL expose only the minimum necessary APIs via `contextBridge` in the preload script. Unused APIs SHALL be removed to follow the principle of least privilege.
+
+#### Scenario: preload 不暴露未使用的 clipboard.readText
+- **WHEN** preload 脚本暴露 `electronAPI` 对象
+- **THEN** `clipboard.readText` SHALL NOT be exposed
+- **THEN** 仅 `clipboard.writeText` SHALL 保留
+- **THEN** main process 中对应的 `ipcMain.handle('clipboard:read', ...)` SHALL 被移除
+
 ### Requirement: API client with token interceptors
 The system SHALL provide an Axios instance in `src/api/client.ts` that automatically attaches the Bearer token from localStorage to all requests and handles 401 responses by clearing the token and redirecting to `/auth`.
 
@@ -100,3 +115,9 @@ The system SHALL provide reusable components for loading, empty states, error bo
 #### Scenario: Toast notification appears and auto-dismisses
 - **WHEN** `showMessage.success("操作成功")` is called
 - **THEN** a toast notification appears at bottom-right displaying "操作成功" and automatically disappears after 2 seconds
+
+#### Scenario: Settings page DEFAULTS matches config.toml
+- **WHEN** Settings page loads and API request fails (using DEFAULTS fallback)
+- **THEN** `DEFAULTS.parser.max_concurrent_fetches` SHALL be 10
+- **THEN** `DEFAULTS.filter.batch_size` SHALL be 1000
+- **THEN** `DEFAULTS.server.port` SHALL be 3000

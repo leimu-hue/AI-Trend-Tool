@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use validator::Validate;
 
 #[derive(Debug, Clone, FromRow, Serialize)]
 pub struct ApiToken {
@@ -40,8 +41,9 @@ impl From<ApiToken> for ApiTokenInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateTokenRequest {
+    #[validate(length(min = 1, message = "name must not be empty"))]
     pub name: String,
     pub expires_at: Option<NaiveDateTime>,
 }

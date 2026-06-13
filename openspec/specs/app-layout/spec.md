@@ -30,7 +30,8 @@ The system SHALL render a fixed-width sidebar (`--sidebar-w: 220px`) containing 
 
 #### Scenario: Sidebar footer
 - **WHEN** the layout renders
-- **THEN** the sidebar footer displays a `.live-dot` indicator with "LIVE" text and "监控中 · 每5分钟自动刷新" status text
+- **THEN** the sidebar footer displays a `.live-dot` indicator with "LIVE" text and "监控中" status text
+- **THEN** the footer SHALL NOT claim any specific auto-refresh interval
 
 ### Requirement: Topbar header
 The system SHALL render a topbar above the main content area displaying the current page title, a BETA badge, a hamburger menu button (mobile), and the current UTC timestamp.
