@@ -2,6 +2,7 @@ mod config;
 mod db;
 mod error;
 mod handlers;
+mod logging;
 mod middleware;
 mod models;
 mod pipeline;
@@ -90,18 +91,17 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Err
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
-
     // Config path from first CLI argument, default to "config.toml"
     let config_path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "config.toml".to_string());
     let config = config::AppConfig::load(&config_path)?;
+
+    // Initialize file + console logging (replaces old tracing_subscriber::fmt init)
+    logging::init_logging(&config);
+
+    // Run log cleanup on startup
+    logging::cleanup_old_logs(&config.logging);
 
     // Ensure data directory exists
     let db_dir = std::path::Path::new(&config.database.path)
@@ -113,7 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::init_pool(&config.database.path, config.parser.max_concurrent_fetches).await?;
 
     // Run migrations (with auto-recovery for checksum mismatches)
+    tracing::info!("Database migration starting...");
     run_migrations(&pool).await?;
+    tracing::info!("Database migration complete");
 
     // Ensure at least one API token exists (first startup bootstrap)
     ensure_initial_token(&pool, &config).await?;
@@ -149,6 +151,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     tracing::info!("Parser + Filter + Pusher running in background");
+
+    // Periodic log cleanup (every 6 hours)
+    let log_cfg = config.logging.clone();
+    let log_cancel = pipeline.cancel.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+        loop {
+            tokio::select! {
+                _ = log_cancel.cancelled() => break,
+                _ = interval.tick() => {
+                    logging::cleanup_old_logs(&log_cfg);
+                }
+            }
+        }
+    });
 
     // Build router and start API server with graceful shutdown
     let app = routes::create_router(pool.clone(), config.clone(), pipeline.clone());

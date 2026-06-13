@@ -1,6 +1,8 @@
 use chrono::Utc;
 use futures::stream::StreamExt;
 use sqlx::SqlitePool;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::config::PusherConfig;
@@ -17,6 +19,7 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig, client: &
         tracing::error!("Pusher: failed to claim pending records: {}", e);
         return;
     }
+    tracing::debug!("Pusher: claim_pending_records completed");
 
     // 2. Poll processing records (atomically claimed) and retry-due records
     let processing = match db::push_record::list_processing_records(pool).await {
@@ -44,16 +47,30 @@ pub async fn run_pusher_once(pool: &SqlitePool, config: &PusherConfig, client: &
     tracing::info!("Pusher: {} pushable record(s)", pushable.len());
 
     // 3. Process each record concurrently (max 8 concurrent)
+    let success_cnt = Arc::new(AtomicU32::new(0));
+    let failed_cnt = Arc::new(AtomicU32::new(0));
+    let gave_up_cnt = Arc::new(AtomicU32::new(0));
+
     futures::stream::iter(&pushable)
         .for_each_concurrent(8, |record| {
             let pool = pool.clone();
             let config = config.clone();
             let client = client.clone();
+            let sc = Arc::clone(&success_cnt);
+            let fc = Arc::clone(&failed_cnt);
+            let gc = Arc::clone(&gave_up_cnt);
             async move {
-                process_one(&pool, &config, &client, record).await;
+                process_one(&pool, &config, &client, record, &sc, &fc, &gc).await;
             }
         })
         .await;
+
+    tracing::info!(
+        "Pusher batch complete: {} success, {} failed, {} gave up",
+        success_cnt.load(Ordering::Relaxed),
+        failed_cnt.load(Ordering::Relaxed),
+        gave_up_cnt.load(Ordering::Relaxed)
+    );
 }
 
 /// Process a single push record: lookup channel & event, POST webhook, update status.
@@ -62,6 +79,9 @@ async fn process_one(
     config: &PusherConfig,
     client: &reqwest::Client,
     record: &crate::models::push_record::PushRecord,
+    success_cnt: &AtomicU32,
+    failed_cnt: &AtomicU32,
+    gave_up_cnt: &AtomicU32,
 ) {
     // 2a. Lookup channel config
     let channel = match db::channel::get_channel_by_id(pool, record.channel_id).await {
@@ -136,7 +156,11 @@ async fn process_one(
                 channel.name
             );
             // Mark as failed with max retries (skip)
-            let _ = mark_failed(pool, config, record.id, record.retry_count).await;
+            if mark_failed(pool, config, record.id, record.retry_count).await {
+                gave_up_cnt.fetch_add(1, Ordering::Relaxed);
+            } else {
+                failed_cnt.fetch_add(1, Ordering::Relaxed);
+            }
             return;
         }
     };
@@ -166,6 +190,7 @@ async fn process_one(
                     channel.name,
                     response.status()
                 );
+                success_cnt.fetch_add(1, Ordering::Relaxed);
                 // Mark success with optimistic locking
                 let updated = db::push_record::update_push_status_optimistic(
                     pool,
@@ -200,7 +225,11 @@ async fn process_one(
                     channel.name,
                     response.status()
                 );
-                mark_failed(pool, config, record.id, record.retry_count).await;
+                if mark_failed(pool, config, record.id, record.retry_count).await {
+                    gave_up_cnt.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    failed_cnt.fetch_add(1, Ordering::Relaxed);
+                }
             }
         }
         Err(e) => {
@@ -210,7 +239,11 @@ async fn process_one(
                 channel.name,
                 e
             );
-            mark_failed(pool, config, record.id, record.retry_count).await;
+            if mark_failed(pool, config, record.id, record.retry_count).await {
+                gave_up_cnt.fetch_add(1, Ordering::Relaxed);
+            } else {
+                failed_cnt.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -218,14 +251,16 @@ async fn process_one(
 /// Mark a push record as failed with exponential backoff.
 /// `next_retry_at = now + (retry_count * retry_base_seconds)`
 /// If max retries reached, sets `next_retry_at` to NULL.
+/// Returns `true` if the record was given up (max retries exhausted).
 async fn mark_failed(
     pool: &SqlitePool,
     config: &PusherConfig,
     record_id: i64,
     current_retry_count: i32,
-) {
+) -> bool {
     let new_retry_count = current_retry_count + 1;
-    let next_retry_at = if new_retry_count >= config.max_retries as i32 {
+    let gave_up = new_retry_count >= config.max_retries as i32;
+    let next_retry_at = if gave_up {
         tracing::warn!(
             "Pusher: record {} reached max retries ({}), giving up",
             record_id,
@@ -253,6 +288,7 @@ async fn mark_failed(
             e
         );
     }
+    gave_up
 }
 
 /// Extract the webhook URL from a channel's config JSON.

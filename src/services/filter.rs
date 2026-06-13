@@ -58,7 +58,10 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     };
 
     if keywords.is_empty() {
-        // No keywords — mark all articles as processed
+        tracing::warn!(
+            "Filter: no enabled keywords found — marking {} article(s) as processed without matching",
+            articles.len()
+        );
         let ids: Vec<i64> = articles.iter().map(|a| a.id).collect();
         if let Err(e) = db::article::mark_processed_batch(pool, &ids).await {
             tracing::error!("Filter: failed to mark articles processed: {}", e);
@@ -133,8 +136,13 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     }
 
     if !mentions.is_empty() {
-        if let Err(e) = db::keyword_mention::batch_insert_keyword_mentions(pool, &mentions).await {
-            tracing::error!("Filter: batch insert keyword_mentions failed: {}", e);
+        match db::keyword_mention::batch_insert_keyword_mentions(pool, &mentions).await {
+            Ok(_) => {
+                tracing::info!("Filter: inserted {} keyword mention(s)", mentions.len());
+            }
+            Err(e) => {
+                tracing::error!("Filter: batch insert keyword_mentions failed: {}", e);
+            }
         }
     }
 
@@ -183,6 +191,7 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
     };
 
     let mut created_push = false;
+    let mut hotspot_count = 0u32;
 
     for kw in &keywords {
         let current_count = *hourly_counts.get(&kw.id).unwrap_or(&0);
@@ -249,7 +258,10 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             )
             .await
             {
-                Ok(_) => created_push = true,
+                Ok(_) => {
+                    created_push = true;
+                    hotspot_count += 1;
+                }
                 Err(e) => {
                     tracing::error!(
                         "Filter: failed to insert push_records for hot_event {}: {}",
@@ -273,6 +285,14 @@ pub async fn run_filter_once(pool: &SqlitePool, config: &FilterConfig) -> bool {
             tracing::error!("Filter: failed to mark articles processed: {}", e);
         }
     }
+
+    tracing::info!(
+        "Filter run complete: {} article(s) processed, {} mention(s), {} hotspot(s) created, push_triggered={}",
+        articles.len(),
+        mentions.len(),
+        hotspot_count,
+        created_push
+    );
 
     created_push
 }

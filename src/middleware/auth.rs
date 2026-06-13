@@ -25,9 +25,13 @@ pub async fn auth_middleware(
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+        .ok_or_else(|| {
+            tracing::warn!("Auth failed: Missing Authorization header");
+            AppError::Unauthorized("Missing Authorization header".to_string())
+        })?;
 
     let token_str = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        tracing::warn!("Auth failed: Invalid Authorization format, expected Bearer");
         AppError::Unauthorized("Invalid Authorization format, expected Bearer".to_string())
     })?;
 
@@ -35,11 +39,15 @@ pub async fn auth_middleware(
     let token_hash = db::token::hash_token(token_str);
     let token: ApiToken = db::token::get_token_by_hash(&state.pool, &token_hash)
         .await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid or revoked token".to_string()))?;
+        .ok_or_else(|| {
+            tracing::warn!("Auth failed: Invalid or revoked token");
+            AppError::Unauthorized("Invalid or revoked token".to_string())
+        })?;
 
     // 3. Check expiry
     if let Some(expires_at) = token.expires_at {
         if expires_at < Utc::now().naive_utc() {
+            tracing::warn!("Auth failed: Token has expired");
             return Err(AppError::Unauthorized("Token has expired".to_string()));
         }
     }

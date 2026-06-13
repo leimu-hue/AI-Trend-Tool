@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub parser: ParserConfig,
     pub filter: FilterConfig,
     pub pusher: PusherConfig,
+    #[serde(default)]
+    pub logging: LoggingConfig,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -30,6 +32,63 @@ pub struct AuthConfig {
 
 fn default_interval() -> u64 {
     30
+}
+
+// ── LoggingConfig default functions ──
+
+fn default_log_dir() -> String {
+    "./logs".to_string()
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+fn default_max_files() -> u32 {
+    30
+}
+
+fn default_max_days() -> u32 {
+    30
+}
+
+fn default_max_total_size_mb() -> u32 {
+    500
+}
+
+fn default_console_output() -> bool {
+    true
+}
+
+// ── LoggingConfig ──
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_log_dir")]
+    pub dir: String,
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    #[serde(default = "default_max_files")]
+    pub max_files: u32,
+    #[serde(default = "default_max_days")]
+    pub max_days: u32,
+    #[serde(default = "default_max_total_size_mb")]
+    pub max_total_size_mb: u32,
+    #[serde(default = "default_console_output")]
+    pub console_output: bool,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            dir: default_log_dir(),
+            level: default_log_level(),
+            max_files: default_max_files(),
+            max_days: default_max_days(),
+            max_total_size_mb: default_max_total_size_mb(),
+            console_output: default_console_output(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -89,6 +148,25 @@ impl AppConfig {
         if self.pusher.max_retries == 0 {
             return Err("pusher.max_retries must be > 0".into());
         }
+        // ── Logging validation ──
+        if self.logging.dir.is_empty() {
+            return Err("logging.dir must not be empty".into());
+        }
+        {
+            let valid_levels = ["trace", "debug", "info", "warn", "error"];
+            if !valid_levels.contains(&self.logging.level.as_str()) {
+                return Err(format!("logging.level must be one of: {:?}", valid_levels).into());
+            }
+        }
+        if self.logging.max_files == 0 {
+            return Err("logging.max_files must be > 0".into());
+        }
+        if self.logging.max_days == 0 {
+            return Err("logging.max_days must be > 0".into());
+        }
+        if self.logging.max_total_size_mb == 0 {
+            return Err("logging.max_total_size_mb must be > 0".into());
+        }
         Ok(())
     }
 }
@@ -126,6 +204,7 @@ mod tests {
                 max_retries: 3,
                 retry_base_seconds: 60,
             },
+            logging: LoggingConfig::default(),
         }
     }
 

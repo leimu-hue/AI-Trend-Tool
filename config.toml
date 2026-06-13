@@ -25,3 +25,11 @@ min_history_hours = 6
 interval_seconds = 10
 max_retries = 3
 retry_base_seconds = 60
+
+[logging]
+dir = "./logs"
+level = "info"
+max_files = 30
+max_days = 7
+max_total_size_mb = 500
+console_output = true

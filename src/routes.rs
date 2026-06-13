@@ -7,7 +7,9 @@ use axum::{
 };
 use serde_json::json;
 use sqlx::SqlitePool;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{cors::{Any, CorsLayer}, trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse}};
+use tower_http::trace::TraceLayer;
+use tracing::Level;
 
 use crate::config::AppConfig;
 use crate::handlers::{channel, keyword, query, source, token};
@@ -61,6 +63,12 @@ pub fn create_router(pool: SqlitePool, config: AppConfig, pipeline: Pipeline) ->
         .route("/health", get(health_check))
         .nest("/api/v1", api)
         .with_state(state)
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_request(DefaultOnRequest::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

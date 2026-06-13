@@ -178,6 +178,10 @@ pub async fn start_parser_loop(pool: SqlitePool, config: ParserConfig, pipeline:
                         }
                         // Notify Filter that new articles are available
                         if inserted > 0 {
+                            tracing::debug!(
+                                "Parser: sending articles_ready event ({} new article(s))",
+                                inserted
+                            );
                             let _ = pipeline.articles_ready_tx.try_send(PipelineEvent::NewData);
                         }
                         tracing::info!(

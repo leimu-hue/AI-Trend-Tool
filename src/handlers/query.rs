@@ -161,6 +161,7 @@ pub async fn get_settings(
 pub async fn trigger_filter(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    tracing::info!("Manual trigger: filter run started");
     let created_push =
         crate::services::filter::run_filter_once(&state.pool, &state.config.filter).await;
     if created_push {
@@ -176,6 +177,7 @@ pub async fn trigger_filter(
 pub async fn trigger_pusher(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    tracing::info!("Manual trigger: pusher run started");
     let client = reqwest::Client::new();
     crate::services::pusher::run_pusher_once(&state.pool, &state.config.pusher, &client).await;
     Ok(ApiResponse::ok(json!({"message": "Pusher executed"})))

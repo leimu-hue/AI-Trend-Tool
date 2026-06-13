@@ -25,11 +25,26 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code, message) = match self {
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg),
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", msg),
+            AppError::NotFound(msg) => {
+                tracing::warn!("NotFound error: {}", msg);
+                (StatusCode::NOT_FOUND, "NOT_FOUND", msg)
+            }
+            AppError::BadRequest(msg) => {
+                tracing::warn!("BadRequest error: {}", msg);
+                (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg)
+            }
+            AppError::Unauthorized(msg) => {
+                tracing::warn!("Unauthorized error: {}", msg);
+                (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg)
+            }
+            AppError::Conflict(msg) => {
+                tracing::warn!("Conflict error: {}", msg);
+                (StatusCode::CONFLICT, "CONFLICT", msg)
+            }
+            AppError::Internal(msg) => {
+                tracing::warn!("Internal error: {}", msg);
+                (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", msg)
+            }
             AppError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
                 (
