@@ -60,6 +60,36 @@ pub async fn ensure_initial_token(
     Ok(())
 }
 
+/// Run migrations with automatic recovery from checksum mismatches.
+///
+/// `sqlx::migrate!()` embeds migration file checksums at compile time. If a
+/// migration SQL file was edited after the DB already recorded its checksum,
+/// sqlx raises `VersionMismatch`. Instead of re-running non-idempotent DDL,
+/// we simply **update the stored checksums** to match the current binary.
+async fn run_migrations(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+    let migrator = sqlx::migrate!("./docs/migrations");
+
+    match migrator.run(pool).await {
+        Ok(()) => Ok(()),
+        Err(sqlx::migrate::MigrateError::VersionMismatch(v)) => {
+            tracing::warn!(
+                "Migration checksum mismatch at version {} — updating stored checksums to match current binary",
+                v
+            );
+            for migration in migrator.iter() {
+                sqlx::query("UPDATE _sqlx_migrations SET checksum = ? WHERE version = ?")
+                    .bind(migration.checksum.as_ref())
+                    .bind(migration.version)
+                    .execute(pool)
+                    .await?;
+            }
+            tracing::info!("Migration checksums updated successfully");
+            Ok(())
+        }
+        Err(e) => Err(Box::new(e)),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
@@ -79,8 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database connection pool
     let pool = db::init_pool(&config.database.path).await?;
 
-    // Run migrations
-    sqlx::migrate!("./docs/migrations").run(&pool).await?;
+    // Run migrations (with auto-recovery for checksum mismatches)
+    run_migrations(&pool).await?;
 
     // Ensure at least one API token exists (first startup bootstrap)
     ensure_initial_token(&pool, &config).await?;

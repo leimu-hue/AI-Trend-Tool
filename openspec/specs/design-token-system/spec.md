@@ -45,15 +45,15 @@ The system SHALL configure Tailwind CSS v4 via `@theme` block in `src/styles/ind
 - **THEN** no CSS reset conflicts SHALL occur with antd's base styles (Tailwind v4 removes the aggressive preflight by default)
 
 ### Requirement: Global CSS entry point
-The system SHALL provide `src/styles/index.css` that contains the Tailwind v4 `@theme` block with prototype design tokens, imports Tailwind layers, and includes only minimal overrides necessary for Electron quirks.
+The system SHALL provide `src/styles/index.css` that contains the Tailwind v4 `@theme` block with prototype design tokens, imports Tailwind layers, includes minimal overrides for Electron quirks, and includes custom CSS component classes for management pages.
 
 #### Scenario: Tailwind layers are available
 - **WHEN** `index.css` is imported in `main.tsx`
 - **THEN** all Tailwind v4 utility classes and `@theme` custom properties are available in components
 
-#### Scenario: No component base classes defined
+#### Scenario: Component base classes defined
 - **WHEN** the CSS is inspected
-- **THEN** there SHALL be NO manually defined `.btn`, `.panel`, `.table`, `.badge`, `.modal`, `.field`, or `.toast` classes — component styling SHALL use antd components or Tailwind utilities
+- **THEN** the following custom component CSS classes SHALL be defined: `.panel` / `.panel-header` / `.panel-title` (panel layout), `.btn` / `.btn-primary` / `.btn-ghost` / `.btn-sm` / `.btn-danger` (button variants), `.badge` / `.badge-success` / `.badge-danger` / `.badge-neutral` (status badges), `.modal-overlay` / `.modal` / `.modal-actions` (modal dialog), `.table-wrap` / `table` (table styles), `.field` / `.field-help` (form fields), `.settings-grid` / `.settings-group` / `.setting-row` / `.setting-label` / `.setting-value` (settings layout), `.toast-container` / `.toast` / `.toast-success` / `.toast-error` / `.toast-info` (toast notifications). All classes SHALL reference design token CSS custom properties (`var(--fg)`, `var(--surface)`, `var(--border)`, etc.) for color values.
 
 ### Requirement: ConfigProvider wraps application root
 The system SHALL create `src/theme/config.tsx` exporting a `<ThemeProvider>` wrapper that combines ConfigProvider with `theme.darkAlgorithm`, custom token overrides, and the antd `App` component for message/modal/notification context.

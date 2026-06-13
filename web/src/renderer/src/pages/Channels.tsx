@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { channelApi, type PushChannel } from '../api/channels'
 import { useToast } from '../components/Toast'
 import Empty from '../components/Empty'
+import Confirm from '../components/Confirm'
 
 interface FormState {
   name: string
@@ -25,10 +26,15 @@ function maskUrl(url: string): string {
   }
 }
 
-function extractUrl(config: Record<string, unknown> | null): string {
-  if (config && typeof config === 'object' && typeof config.url === 'string') {
-    return config.url
+function extractUrl(config: string | Record<string, unknown> | null): string {
+  if (!config) return ''
+  let obj: Record<string, unknown>
+  if (typeof config === 'string') {
+    try { obj = JSON.parse(config) } catch { return '' }
+  } else {
+    obj = config
   }
+  if (typeof obj.url === 'string') return obj.url
   return ''
 }
 
@@ -39,6 +45,8 @@ export default function Channels() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<PushChannel | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const toast = useToast()
 
   const load = useCallback(() => {
@@ -92,7 +100,7 @@ export default function Channels() {
       return
     }
     setSubmitting(true)
-    const config = { url: form.webhook_url.trim() }
+    const config = JSON.stringify({ url: form.webhook_url.trim() })
     try {
       if (editingId !== null) {
         await channelApi.update(editingId, {
@@ -119,15 +127,17 @@ export default function Channels() {
   }
 
   async function handleDelete() {
-    if (editingId === null) return
-    if (!window.confirm('确定要删除该推送渠道吗？')) return
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await channelApi.delete(editingId)
+      await channelApi.delete(deleteTarget.id)
       toast.success('推送渠道已删除')
-      closeModal()
+      setDeleteTarget(null)
       load()
     } catch {
       // error handled by interceptor
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -209,6 +219,12 @@ export default function Channels() {
                         >
                           编辑
                         </button>
+                        <button
+                          className="btn btn-ghost btn-sm btn-danger"
+                          onClick={() => setDeleteTarget(c)}
+                        >
+                          删除
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -250,15 +266,6 @@ export default function Channels() {
             />
           </div>
           <div className="modal-actions">
-            {editingId !== null && (
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={handleDelete}
-                style={{ marginRight: 'auto' }}
-              >
-                删除
-              </button>
-            )}
             <button className="btn btn-ghost btn-sm" onClick={closeModal}>
               取消
             </button>
@@ -272,6 +279,16 @@ export default function Channels() {
           </div>
         </div>
       </div>
+
+      <Confirm
+        open={deleteTarget !== null}
+        title="删除推送渠道"
+        message={`确定要删除推送渠道「${deleteTarget?.name}」吗？此操作不可撤销。`}
+        confirmText="删除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

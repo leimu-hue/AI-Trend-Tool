@@ -44,11 +44,11 @@
 - **THEN** 调用 `POST /api/v1/keywords/update/{id}`，关闭 Modal，刷新列表，显示"关键词已更新"Toast
 
 ### Requirement: Delete keyword
-系统 SHALL 支持从编辑 Modal 中删除关键词。
+系统 SHALL 支持从表格行内删除关键词。
 
 #### Scenario: Delete with confirmation
-- **WHEN** 用户在编辑 Modal 中点击「删除」按钮
-- **THEN** 弹出 `window.confirm` 确认，确认后调用 `POST /api/v1/keywords/delete/{id}`，关闭 Modal，刷新列表，显示"关键词已删除"Toast
+- **WHEN** 用户在表格行内点击「删除」按钮
+- **THEN** 弹出 Confirm 确认弹窗，确认后调用 `POST /api/v1/keywords/delete/{id}`，刷新列表，显示"关键词已删除"Toast
 
 ### Requirement: Toggle keyword enabled state
 系统 SHALL 支持行内切换关键词启用/暂停状态，无需打开 Modal。

@@ -52,11 +52,11 @@
 - **THEN** 调用 `POST /api/v1/sources/update/{id}`，关闭 Modal，刷新列表，显示"数据源已更新"Toast
 
 ### Requirement: Delete data source
-系统 SHALL 支持从编辑 Modal 中删除数据源。
+系统 SHALL 支持从表格行内删除数据源。
 
 #### Scenario: Delete with confirmation
-- **WHEN** 用户在编辑 Modal 中点击「删除」按钮
-- **THEN** 弹出 `window.confirm` 确认，确认后调用 `POST /api/v1/sources/delete/{id}`，关闭 Modal，刷新列表，显示"数据源已删除"Toast
+- **WHEN** 用户在表格行内点击「删除」按钮
+- **THEN** 弹出 Confirm 确认弹窗，确认后调用 `POST /api/v1/sources/delete/{id}`，刷新列表，显示"数据源已删除"Toast
 
 ### Requirement: Manual fetch trigger
 系统 SHALL 支持手动触发数据源抓取。

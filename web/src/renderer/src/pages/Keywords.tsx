@@ -2,19 +2,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { keywordApi, type Keyword } from '../api/keywords'
 import { useToast } from '../components/Toast'
 import Empty from '../components/Empty'
+import Confirm from '../components/Confirm'
 
 interface FormState {
-  keyword: string
+  word: string
   case_sensitive: boolean
-  std_multiplier: number
-  min_hot_count: number
+  std_multiplier: string
+  min_hot_count: string
 }
 
 const EMPTY_FORM: FormState = {
-  keyword: '',
+  word: '',
   case_sensitive: false,
-  std_multiplier: 2.0,
-  min_hot_count: 3
+  std_multiplier: '2.0',
+  min_hot_count: '3'
 }
 
 export default function Keywords() {
@@ -24,6 +25,8 @@ export default function Keywords() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Keyword | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const toast = useToast()
 
   const load = useCallback(() => {
@@ -47,10 +50,10 @@ export default function Keywords() {
   function openEdit(item: Keyword) {
     setEditingId(item.id)
     setForm({
-      keyword: item.keyword,
+      word: item.word,
       case_sensitive: item.case_sensitive,
-      std_multiplier: item.std_multiplier,
-      min_hot_count: item.min_hot_count
+      std_multiplier: String(item.std_multiplier),
+      min_hot_count: String(item.min_hot_count)
     })
     setShowModal(true)
   }
@@ -69,26 +72,36 @@ export default function Keywords() {
   }
 
   async function handleSubmit() {
-    if (!form.keyword.trim()) {
+    if (!form.word.trim()) {
       toast.error('请输入关键词')
+      return
+    }
+    const stdMultiplier = form.std_multiplier === '' ? 2.0 : parseFloat(form.std_multiplier)
+    const minHotCount = form.min_hot_count === '' ? 3 : parseInt(form.min_hot_count, 10)
+    if (isNaN(stdMultiplier) || stdMultiplier <= 0) {
+      toast.error('标准差倍数必须大于 0')
+      return
+    }
+    if (isNaN(minHotCount) || minHotCount <= 0) {
+      toast.error('最小触发计数必须 ≥ 1')
       return
     }
     setSubmitting(true)
     try {
       if (editingId !== null) {
         await keywordApi.update(editingId, {
-          keyword: form.keyword.trim(),
+          word: form.word.trim(),
           case_sensitive: form.case_sensitive,
-          std_multiplier: form.std_multiplier,
-          min_hot_count: form.min_hot_count
+          std_multiplier: stdMultiplier,
+          min_hot_count: minHotCount
         })
         toast.success('关键词已更新')
       } else {
         await keywordApi.create({
-          keyword: form.keyword.trim(),
+          word: form.word.trim(),
           case_sensitive: form.case_sensitive,
-          std_multiplier: form.std_multiplier,
-          min_hot_count: form.min_hot_count
+          std_multiplier: stdMultiplier,
+          min_hot_count: minHotCount
         })
         toast.success('关键词已添加')
       }
@@ -102,15 +115,17 @@ export default function Keywords() {
   }
 
   async function handleDelete() {
-    if (editingId === null) return
-    if (!window.confirm('确定要删除该关键词吗？')) return
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await keywordApi.delete(editingId)
+      await keywordApi.delete(deleteTarget.id)
       toast.success('关键词已删除')
-      closeModal()
+      setDeleteTarget(null)
       load()
     } catch {
       // error handled by interceptor
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -160,7 +175,7 @@ export default function Keywords() {
                 {keywords.map((k) => (
                   <tr key={k.id}>
                     <td className="mono" style={{ color: 'var(--color-fg)' }}>
-                      {k.keyword}
+                      {k.word}
                     </td>
                     <td>{k.case_sensitive ? '是' : '否'}</td>
                     <td>{k.std_multiplier}</td>
@@ -187,6 +202,12 @@ export default function Keywords() {
                         >
                           编辑
                         </button>
+                        <button
+                          className="btn btn-ghost btn-sm btn-danger"
+                          onClick={() => setDeleteTarget(k)}
+                        >
+                          删除
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -204,8 +225,8 @@ export default function Keywords() {
           <div className="field">
             <label>关键词</label>
             <input
-              value={form.keyword}
-              onChange={(e) => setField('keyword', e.target.value)}
+              value={form.word}
+              onChange={(e) => setField('word', e.target.value)}
               placeholder="例如：AI 热点"
             />
           </div>
@@ -226,7 +247,7 @@ export default function Keywords() {
               step="0.1"
               min="0"
               value={form.std_multiplier}
-              onChange={(e) => setField('std_multiplier', parseFloat(e.target.value) || 0)}
+              onChange={(e) => setField('std_multiplier', e.target.value)}
             />
             <div className="field-help">当前计数超过均值+N倍标准差时触发热点</div>
           </div>
@@ -237,26 +258,17 @@ export default function Keywords() {
               step="1"
               min="1"
               value={form.min_hot_count}
-              onChange={(e) => setField('min_hot_count', parseInt(e.target.value) || 0)}
+              onChange={(e) => setField('min_hot_count', e.target.value)}
             />
             <div className="field-help">计数低于此值不计为热点</div>
           </div>
           <div className="modal-actions">
-            {editingId !== null && (
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={handleDelete}
-                style={{ marginRight: 'auto' }}
-              >
-                删除
-              </button>
-            )}
             <button className="btn btn-ghost btn-sm" onClick={closeModal}>
               取消
             </button>
             <button
               className="btn btn-primary btn-sm"
-              disabled={submitting || !form.keyword.trim()}
+              disabled={submitting || !form.word.trim()}
               onClick={handleSubmit}
             >
               {submitting ? '提交中...' : editingId !== null ? '确认修改' : '确认添加'}
@@ -264,6 +276,16 @@ export default function Keywords() {
           </div>
         </div>
       </div>
+
+      <Confirm
+        open={deleteTarget !== null}
+        title="删除关键词"
+        message={`确定要删除关键词「${deleteTarget?.word}」吗？此操作不可撤销。`}
+        confirmText="删除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

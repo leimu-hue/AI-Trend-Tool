@@ -1,16 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
+import { DatePicker } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
 import { tokenApi, type TokenInfo, type CreateTokenResponse } from '../api/tokens'
 import { useToast } from '../components/Toast'
 import Empty from '../components/Empty'
+import Confirm from '../components/Confirm'
+
+const EXPIRY_PRESETS = [
+  { label: '7 天', days: 7 },
+  { label: '30 天', days: 30 },
+  { label: '90 天', days: 90 },
+  { label: '1 年', days: 365 }
+]
 
 export default function Tokens() {
   const [tokens, setTokens] = useState<TokenInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingName, setEditingName] = useState('')
-  const [editingExpiry, setEditingExpiry] = useState('')
+  const [editingExpiry, setEditingExpiry] = useState<Dayjs | null>(null)
+  const [noExpiry, setNoExpiry] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [revealToken, setRevealToken] = useState<CreateTokenResponse | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<TokenInfo | null>(null)
   const toast = useToast()
 
   const load = useCallback(() => {
@@ -28,7 +40,8 @@ export default function Tokens() {
   function openModal() {
     setRevealToken(null)
     setEditingName('')
-    setEditingExpiry('')
+    setEditingExpiry(null)
+    setNoExpiry(true)
     setShowModal(true)
   }
 
@@ -51,7 +64,7 @@ export default function Tokens() {
     try {
       const result = await tokenApi.create({
         name: editingName.trim(),
-        expires_at: editingExpiry || null
+        expires_at: noExpiry || !editingExpiry ? null : editingExpiry.format('YYYY-MM-DDTHH:mm:ss')
       })
       setRevealToken(result)
       toast.success('令牌已生成')
@@ -62,11 +75,12 @@ export default function Tokens() {
     }
   }
 
-  async function handleRevoke(token: TokenInfo) {
-    if (!window.confirm(`确定要吊销令牌 "${token.name}" 吗？`)) return
+  async function handleRevoke() {
+    if (!revokeTarget) return
     try {
-      await tokenApi.revoke(token.id)
+      await tokenApi.revoke(revokeTarget.id)
       toast.success('令牌已吊销')
+      setRevokeTarget(null)
       load()
     } catch {
       // error handled by interceptor
@@ -160,7 +174,7 @@ export default function Tokens() {
                       ) : (
                         <button
                           className="btn btn-ghost btn-sm btn-danger"
-                          onClick={() => handleRevoke(t)}
+                          onClick={() => setRevokeTarget(t)}
                         >
                           吊销
                         </button>
@@ -219,13 +233,47 @@ export default function Tokens() {
                 />
               </div>
               <div className="field">
-                <label>过期时间（可选，留空为永久）</label>
-                <input
-                  type="date"
-                  value={editingExpiry}
-                  onChange={(e) => setEditingExpiry(e.target.value)}
-                />
-                <div className="field-help">不设置则令牌永久有效</div>
+                <label>过期时间</label>
+                <label className="expiry-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={noExpiry}
+                    onChange={(e) => {
+                      setNoExpiry(e.target.checked)
+                      if (e.target.checked) setEditingExpiry(null)
+                    }}
+                  />
+                  <span>永久有效</span>
+                </label>
+                {!noExpiry && (
+                  <>
+                    <div className="expiry-presets">
+                      {EXPIRY_PRESETS.map((p) => (
+                        <button
+                          key={p.days}
+                          type="button"
+                          className="btn btn-ghost btn-sm expiry-preset-btn"
+                          onClick={() => setEditingExpiry(dayjs().add(p.days, 'day'))}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <DatePicker
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
+                      placeholder="选择过期时间"
+                      value={editingExpiry}
+                      onChange={(val) => setEditingExpiry(val)}
+                      disabledDate={(current) => current && current < dayjs().startOf('day')}
+                      style={{ width: '100%' }}
+                      popupClassName="token-expiry-picker"
+                    />
+                  </>
+                )}
+                <div className="field-help">
+                  {noExpiry ? '令牌将永久有效，直到手动吊销' : '也可点击上方快捷按钮快速设置'}
+                </div>
               </div>
               <div className="modal-actions">
                 <button className="btn btn-ghost btn-sm" onClick={closeModal}>
@@ -243,6 +291,16 @@ export default function Tokens() {
           )}
         </div>
       </div>
+
+      <Confirm
+        open={revokeTarget !== null}
+        title="吊销令牌"
+        message={`确定要吊销令牌「${revokeTarget?.name}」吗？此操作不可撤销。`}
+        confirmText="吊销"
+        danger
+        onConfirm={handleRevoke}
+        onCancel={() => setRevokeTarget(null)}
+      />
     </div>
   )
 }

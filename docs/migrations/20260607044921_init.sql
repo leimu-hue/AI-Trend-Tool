@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS api_tokens (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL,
-    token       TEXT    NOT NULL UNIQUE,
+    token       TEXT    NOT NULL,
     last_used_at DATETIME,
     created_at  DATETIME NOT NULL DEFAULT (datetime('now')),
     expires_at  DATETIME,
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS articles (
     processed_at DATETIME
 );
 
-CREATE INDEX idx_articles_processed ON articles(processed_at);
-CREATE INDEX idx_articles_source    ON articles(source_id);
-CREATE INDEX idx_articles_fetched   ON articles(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_articles_processed ON articles(processed_at);
+CREATE INDEX IF NOT EXISTS idx_articles_source    ON articles(source_id);
+CREATE INDEX IF NOT EXISTS idx_articles_fetched   ON articles(fetched_at);
 
 -- ============================================================
 -- 关键词表
@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS keyword_mentions (
     matched_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_mentions_keyword ON keyword_mentions(keyword_id);
-CREATE INDEX idx_mentions_article ON keyword_mentions(article_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_keyword ON keyword_mentions(keyword_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_article ON keyword_mentions(article_id);
 
 -- ============================================================
 -- 热点事件表
@@ -85,8 +85,8 @@ CREATE TABLE IF NOT EXISTS hot_events (
     created_at        DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_hot_events_keyword  ON hot_events(keyword_id);
-CREATE INDEX idx_hot_events_bucket   ON hot_events(hour_bucket);
+CREATE INDEX IF NOT EXISTS idx_hot_events_keyword  ON hot_events(keyword_id);
+CREATE INDEX IF NOT EXISTS idx_hot_events_bucket   ON hot_events(hour_bucket);
 
 -- ============================================================
 -- 推送渠道表
@@ -114,4 +114,4 @@ CREATE TABLE IF NOT EXISTS push_records (
     UNIQUE(hot_event_id, channel_id)
 );
 
-CREATE INDEX idx_push_records_status ON push_records(status);
+CREATE INDEX IF NOT EXISTS idx_push_records_status ON push_records(status);

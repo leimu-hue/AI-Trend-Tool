@@ -4,7 +4,7 @@
 
 推送渠道管理页面 — 表格展示所有推送渠道，支持添加、编辑、删除和测试 Webhook 连接，使用自定义 CSS 组件匹配原型暗色主题。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Channels table display
 系统 SHALL 以表格形式展示所有推送渠道，每行显示名称、类型、Webhook URL（脱敏）、推送次数、上次推送时间、启用状态和操作按钮。
@@ -48,11 +48,11 @@
 - **THEN** 调用 `POST /api/v1/channels/update/{id}`，关闭 Modal，刷新列表，显示"推送渠道已更新"Toast
 
 ### Requirement: Delete channel
-系统 SHALL 支持从编辑 Modal 中删除渠道。
+系统 SHALL 支持从表格行内删除渠道。
 
 #### Scenario: Delete with confirmation
-- **WHEN** 用户在编辑 Modal 中点击「删除」按钮
-- **THEN** 弹出 `window.confirm` 确认，确认后调用 `POST /api/v1/channels/delete/{id}`，关闭 Modal，刷新列表，显示"推送渠道已删除"Toast
+- **WHEN** 用户在表格行内点击「删除」按钮
+- **THEN** 弹出 Confirm 确认弹窗，确认后调用 `POST /api/v1/channels/delete/{id}`，刷新列表，显示"推送渠道已删除"Toast
 
 ### Requirement: Test channel webhook
 系统 SHALL 支持测试推送渠道的 Webhook 连接。

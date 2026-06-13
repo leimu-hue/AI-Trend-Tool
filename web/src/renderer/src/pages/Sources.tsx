@@ -2,19 +2,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { sourceApi, type DataSource } from '../api/sources'
 import { useToast } from '../components/Toast'
 import Empty from '../components/Empty'
+import Confirm from '../components/Confirm'
 
 interface FormState {
   name: string
-  source_type: string
+  type: string
   url: string
-  interval_seconds: number
+  interval_seconds: string
 }
 
 const EMPTY_FORM: FormState = {
   name: '',
-  source_type: 'RSS',
+  type: 'RSS',
   url: '',
-  interval_seconds: 300
+  interval_seconds: '300'
 }
 
 export default function Sources() {
@@ -24,6 +25,8 @@ export default function Sources() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const toast = useToast()
 
   const load = useCallback(() => {
@@ -48,9 +51,9 @@ export default function Sources() {
     setEditingId(item.id)
     setForm({
       name: item.name,
-      source_type: item.source_type,
+      type: item.type,
       url: item.url,
-      interval_seconds: item.interval_seconds
+      interval_seconds: String(item.interval_seconds)
     })
     setShowModal(true)
   }
@@ -77,22 +80,27 @@ export default function Sources() {
       toast.error('请输入数据源 URL')
       return
     }
+    const intervalSeconds = form.interval_seconds === '' ? 300 : parseInt(form.interval_seconds, 10)
+    if (isNaN(intervalSeconds) || intervalSeconds < 30) {
+      toast.error('拉取间隔最小为 30 秒')
+      return
+    }
     setSubmitting(true)
     try {
       if (editingId !== null) {
         await sourceApi.update(editingId, {
           name: form.name.trim(),
-          source_type: form.source_type,
+          type: form.type,
           url: form.url.trim(),
-          interval_seconds: form.interval_seconds
+          interval_seconds: intervalSeconds
         })
         toast.success('数据源已更新')
       } else {
         await sourceApi.create({
           name: form.name.trim(),
-          source_type: form.source_type,
+          type: form.type,
           url: form.url.trim(),
-          interval_seconds: form.interval_seconds
+          interval_seconds: intervalSeconds
         })
         toast.success('数据源已添加')
       }
@@ -106,15 +114,17 @@ export default function Sources() {
   }
 
   async function handleDelete() {
-    if (editingId === null) return
-    if (!window.confirm('确定要删除该数据源吗？')) return
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await sourceApi.delete(editingId)
+      await sourceApi.delete(deleteTarget.id)
       toast.success('数据源已删除')
-      closeModal()
+      setDeleteTarget(null)
       load()
     } catch {
       // error handled by interceptor
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -178,7 +188,7 @@ export default function Sources() {
                   <tr key={s.id}>
                     <td style={{ color: 'var(--color-fg)' }}>{s.name}</td>
                     <td>
-                      <span className="badge badge-neutral">{s.source_type}</span>
+                      <span className="badge badge-neutral">{s.type}</span>
                     </td>
                     <td className="mono truncate" title={s.url}>
                       {truncateUrl(s.url)}
@@ -205,6 +215,12 @@ export default function Sources() {
                         >
                           编辑
                         </button>
+                        <button
+                          className="btn btn-ghost btn-sm btn-danger"
+                          onClick={() => setDeleteTarget(s)}
+                        >
+                          删除
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -230,8 +246,8 @@ export default function Sources() {
           <div className="field">
             <label>类型</label>
             <select
-              value={form.source_type}
-              onChange={(e) => setField('source_type', e.target.value)}
+              value={form.type}
+              onChange={(e) => setField('type', e.target.value)}
             >
               <option value="RSS">RSS</option>
               <option value="API">API</option>
@@ -254,20 +270,11 @@ export default function Sources() {
               step="1"
               min="30"
               value={form.interval_seconds}
-              onChange={(e) => setField('interval_seconds', parseInt(e.target.value) || 30)}
+              onChange={(e) => setField('interval_seconds', e.target.value)}
             />
             <div className="field-help">最小 30 秒，默认 300 秒</div>
           </div>
           <div className="modal-actions">
-            {editingId !== null && (
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={handleDelete}
-                style={{ marginRight: 'auto' }}
-              >
-                删除
-              </button>
-            )}
             <button className="btn btn-ghost btn-sm" onClick={closeModal}>
               取消
             </button>
@@ -281,6 +288,16 @@ export default function Sources() {
           </div>
         </div>
       </div>
+
+      <Confirm
+        open={deleteTarget !== null}
+        title="删除数据源"
+        message={`确定要删除数据源「${deleteTarget?.name}」吗？此操作不可撤销。`}
+        confirmText="删除"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

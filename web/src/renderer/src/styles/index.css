@@ -322,6 +322,64 @@ body {
   color: var(--color-meta);
 }
 
+/* Prevent .field input styles from overriding antd picker internals */
+.field .ant-picker {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.field .ant-picker:hover {
+  border-color: var(--color-fg-2);
+}
+
+.field .ant-picker-focused {
+  border-color: var(--color-fg-2);
+  box-shadow: none;
+}
+
+.field .ant-picker .ant-picker-input > input {
+  background: transparent;
+  border: none;
+  color: var(--color-fg);
+  font-family: var(--font-family-body);
+  font-size: 13.5px;
+  padding: 0;
+  height: auto;
+  box-shadow: none;
+}
+
+.field .ant-picker .ant-picker-input > input::placeholder {
+  color: var(--color-meta);
+}
+
+.field .ant-picker .ant-picker-suffix {
+  color: var(--color-muted);
+}
+
+.field .ant-picker .ant-picker-clear {
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+
+.field .ant-picker .ant-picker-clear:hover {
+  color: var(--color-fg-2);
+}
+
+/* Hide native number input spinners */
+.field input[type='number']::-webkit-inner-spin-button,
+.field input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.field input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .field-help {
   margin-top: 4px;
   font-size: 11.5px;
@@ -470,4 +528,157 @@ body {
   color: var(--color-warn);
   margin-top: 12px;
   line-height: 1.5;
+}
+
+/* ─── Expiry picker (Tokens modal) ─── */
+.expiry-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-fg-2);
+  margin-bottom: 10px;
+  user-select: none;
+}
+
+.expiry-checkbox input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-success);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.expiry-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.expiry-preset-btn {
+  font-size: 11.5px !important;
+  padding: 3px 10px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-pill) !important;
+  color: var(--color-fg-2) !important;
+  background: transparent !important;
+  transition: all 0.15s !important;
+}
+
+.expiry-preset-btn:hover {
+  background: var(--color-accent) !important;
+  color: var(--color-fg) !important;
+  border-color: var(--color-fg-2) !important;
+}
+
+/* Ant Design DatePicker dark theme overrides */
+.token-expiry-picker .ant-picker-panel-container,
+.ant-picker-dropdown .ant-picker-panel-container {
+  background: var(--color-surface);
+}
+
+.token-expiry-picker .ant-picker-cell:hover .ant-picker-cell-inner,
+.ant-picker-dropdown .ant-picker-cell:hover .ant-picker-cell-inner {
+  background: var(--color-accent);
+}
+
+.token-expiry-picker .ant-picker-cell-selected .ant-picker-cell-inner,
+.ant-picker-dropdown .ant-picker-cell-selected .ant-picker-cell-inner {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.token-expiry-picker .ant-picker-header,
+.ant-picker-dropdown .ant-picker-header {
+  color: var(--color-fg);
+  border-bottom-color: var(--color-border);
+}
+
+.token-expiry-picker .ant-picker-header button,
+.ant-picker-dropdown .ant-picker-header button {
+  color: var(--color-fg-2);
+}
+
+.token-expiry-picker .ant-picker-header button:hover,
+.ant-picker-dropdown .ant-picker-header button:hover {
+  color: var(--color-fg);
+}
+
+.token-expiry-picker .ant-picker-content th,
+.ant-picker-dropdown .ant-picker-content th {
+  color: var(--color-muted);
+}
+
+.token-expiry-picker .ant-picker-cell,
+.ant-picker-dropdown .ant-picker-cell {
+  color: var(--color-meta);
+}
+
+.token-expiry-picker .ant-picker-cell-in-view,
+.ant-picker-dropdown .ant-picker-cell-in-view {
+  color: var(--color-fg-2);
+}
+
+.token-expiry-picker .ant-picker-cell-disabled .ant-picker-cell-inner,
+.ant-picker-dropdown .ant-picker-cell-disabled .ant-picker-cell-inner {
+  background: transparent;
+  color: var(--color-meta);
+  opacity: 0.4;
+}
+
+.token-expiry-picker .ant-picker-footer,
+.ant-picker-dropdown .ant-picker-footer {
+  border-top-color: var(--color-border);
+}
+
+.token-expiry-picker .ant-picker-now-btn,
+.ant-picker-dropdown .ant-picker-now-btn {
+  color: var(--color-fg-2);
+}
+
+.token-expiry-picker .ant-picker-ok .ant-btn,
+.ant-picker-dropdown .ant-picker-ok .ant-btn {
+  background: var(--color-fg);
+  border-color: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.token-expiry-picker .ant-picker-ok .ant-btn:hover,
+.ant-picker-dropdown .ant-picker-ok .ant-btn:hover {
+  background: var(--color-accent-on);
+  border-color: var(--color-accent-on);
+}
+
+.token-expiry-picker .ant-picker-time-panel,
+.ant-picker-dropdown .ant-picker-time-panel {
+  border-left-color: var(--color-border);
+}
+
+.token-expiry-picker .ant-picker-time-panel-column > li.ant-picker-time-panel-cell .ant-picker-time-panel-cell-inner,
+.ant-picker-dropdown .ant-picker-time-panel-column > li.ant-picker-time-panel-cell .ant-picker-time-panel-cell-inner {
+  color: var(--color-fg-2);
+}
+
+.token-expiry-picker .ant-picker-time-panel-column > li.ant-picker-time-panel-cell:hover .ant-picker-time-panel-cell-inner,
+.ant-picker-dropdown .ant-picker-time-panel-column > li.ant-picker-time-panel-cell:hover .ant-picker-time-panel-cell-inner {
+  background: var(--color-accent);
+}
+
+.token-expiry-picker .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner,
+.ant-picker-dropdown .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  background: var(--color-accent);
+  color: var(--color-fg);
+}
+
+.token-expiry-picker .ant-picker-time-panel-column::-webkit-scrollbar,
+.ant-picker-dropdown .ant-picker-time-panel-column::-webkit-scrollbar {
+  width: 3px;
+}
+
+.token-expiry-picker .ant-picker-time-panel-column::-webkit-scrollbar-thumb,
+.ant-picker-dropdown .ant-picker-time-panel-column::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
 }

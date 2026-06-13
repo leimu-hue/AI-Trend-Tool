@@ -2,8 +2,9 @@ import client from './client'
 
 export interface DataSource {
   id: number
+  // 后端 serde(rename = "type")，JSON 字段名为 "type"
+  type: string
   name: string
-  source_type: string
   url: string
   interval_seconds: number
   config: Record<string, unknown> | null
@@ -16,7 +17,7 @@ export interface DataSource {
 
 export interface CreateSourceRequest {
   name: string
-  source_type: string
+  type: string
   url: string
   interval_seconds?: number
   config?: Record<string, unknown>
@@ -24,7 +25,7 @@ export interface CreateSourceRequest {
 
 export interface UpdateSourceRequest {
   name?: string
-  source_type?: string
+  type?: string
   url?: string
   interval_seconds?: number
   config?: Record<string, unknown>
@@ -40,9 +41,9 @@ export const sourceApi = {
     client.post<{ data: DataSource }>('/sources', data).then((r) => r.data.data),
 
   update: (id: number, data: UpdateSourceRequest) =>
-    client.post<{ data: DataSource }>(`/sources/update/${id}`, data).then((r) => r.data.data),
+    client.post<{ data: DataSource }>(`/sources/${id}/update`, data).then((r) => r.data.data),
 
-  delete: (id: number) => client.post(`/sources/delete/${id}`).then((r) => r.data),
+  delete: (id: number) => client.post(`/sources/${id}/delete`).then((r) => r.data),
 
-  fetch: (id: number) => client.post(`/sources/fetch/${id}`).then((r) => r.data)
+  fetch: (id: number) => client.post(`/sources/${id}/fetch`).then((r) => r.data)
 }
